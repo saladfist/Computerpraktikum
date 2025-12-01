@@ -158,11 +158,12 @@ print(remaining_clusters)
 #plot clusters
 #%%
 fig,axs=plt.subplots(1,2)
-cluster1x,cluster1y=zip(*list(remaining_clusters[0]))
-print(cluster1x,cluster1y)
 print(data_list)
 datax,datay=zip(*data_list)
-axs[0].plot(cluster1x,cluster1y,"o",markersize=2)
+for cluster in remaining_clusters:
+    print(cluster)
+    clusterx,clustery=zip(*list(cluster))
+    axs[0].plot(clusterx,clustery,"o",markersize=2)
 axs[1].plot(datax,datay,"o",markersize=2)
 
 # ax.plot(cluster2)
