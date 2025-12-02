@@ -5,7 +5,7 @@ import pandas as pd
 import os 
 import numpy as np
 
-data=pd.read_csv(os.path.dirname((os.getcwd()))+"/data/Teil 2_ Datensätze zum Clustering/bananas-1-2d.csv",header=None)
+data=pd.read_csv(os.path.dirname((os.getcwd()))+"/data/bananas-1-2d.csv",header=None)
 data_list=data.values.tolist()
 delta_c=0.01
 m_cubes=int(1/delta_c)
@@ -47,9 +47,6 @@ def h_D_delta(x, data, delta, precomputed_cubes=None):
     h/=n*2**d*delta**d
     return h
 
-
-
-
 x_test=[]
 for i in range(m_cubes+1):
     for j in range(m_cubes+1):
@@ -62,7 +59,6 @@ for x in x_test:
 plt.tricontourf([x[0] for x in x_test],[x[1] for x in x_test],h,cmap="viridis")
 plt.colorbar()
 plt.show()
-
 
 # iteration over thresholds and find M intervals
 def get_M(data,rho,h_values): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
@@ -107,13 +103,13 @@ def get_tau_connected_clusters(M,tau): #get B sets
 def drop_clusters(B,h_values,data,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε
     remaining_clusters=[]
     for clusters in B:
-        is_higher=False
-        for point in clusters:
-            idx=data.index(list(point)) #seems to be inefficient maybe lookuptable
-            if h_values[idx]>=rho+2*epsilon:
-                is_higher=True
-                break
-        if is_higher:
+        max_h=max([h_values[data.index(list(point))] for point in clusters])
+        # for point in clusters: #more efficient would be maybe to sort the hvalues of the B set first, if the max h value is smaller we can instantly discard
+        #     idx=data.index(list(point)) #seems to be inefficient since it searches the data array linearly everytime maybe lookuptable 
+        #     if h_values[idx]>=rho+2*epsilon:
+        #         is_higher=True
+        #         break
+        if max_h>=2*rho+epsilon:
             remaining_clusters.append(clusters)
     return remaining_clusters
 
@@ -122,7 +118,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     d=len(data[0])
     cubes_dict=precompute_cubes(data,delta,d)
     h_values=[]
-    rho=0.1
+    rho=0
 
     for x in data:
         h_values.append(h_D_delta(x,data,delta,cubes_dict))
@@ -133,37 +129,38 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     # find equivalence classes and clusters
     M_current=get_M(data,rho,h_values)
     B_current=get_tau_connected_clusters(M_current,tau)
-    iteration_counter=0
-    multiple_clusters=False
     while True:
-        iteration_counter+=1
         M_initial=len(B_current)
         remaining_clusters=drop_clusters(B_current,h_values,data,rho,epsilon)
         M_new=len(remaining_clusters)
+        if M_new==0:
+            break
         print(f"rho: {rho}, clusters before drop: {M_initial}, clusters after drop: {M_new})")
         rho+=rho_step
+        if rho>1000:
+            Exception("error")
+        #update M and B for next iteration
         M_current=get_M(data,rho,h_values)
         B_current=get_tau_connected_clusters(M_current,tau)
-        if M_new>1:
-            multiple_clusters=True
-        if M_new<=1 and multiple_clusters:
-            break
-    return remaining_clusters
+    return B_current
 
 
 
 
-remaining_clusters=iteration_over_rho(data_list,delta=0.05,epsilon_factor=1.0,tau_factor=2.000001)
+remaining_clusters=iteration_over_rho(data_list,delta=0.05,epsilon_factor=3.0,tau_factor=2.000001)
 print(remaining_clusters)
 #plot clusters
 #%%
 fig,axs=plt.subplots(1,2)
 print(data_list)
 datax,datay=zip(*data_list)
+print(len(remaining_clusters))
 for cluster in remaining_clusters:
     print(cluster)
     clusterx,clustery=zip(*list(cluster))
     axs[0].plot(clusterx,clustery,"o",markersize=2)
+
+
 axs[1].plot(datax,datay,"o",markersize=2)
 
 # ax.plot(cluster2)
