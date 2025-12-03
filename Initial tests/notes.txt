@@ -1,0 +1,7 @@
+I think a possible better and maybe faster alternative is to decompose the space into (hyper-)cubes
+of length tau put every datapoint into a dictionary which maps the index (position) to its cube(-index). 
+We then take a random cube and can enter every contained datapoint to a B cluster and query each of the 3**d-1 
+neighbors of the cube into a stack and check the distance between points in there to the first cube. Iteratively when 
+this is finished and there were points found in the neighboring cubes search these cubes neighbors. cubes 
+already searched during this iteration should be exempt due to redundancy (maybe with list of already searched cubes).
+When this method runs out of unsearched cubes, choose a next random point not contained in this B.  

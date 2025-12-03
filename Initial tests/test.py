@@ -5,7 +5,7 @@ import pandas as pd
 import os 
 from collections import deque, defaultdict
 
-df=pd.read_csv(os.path.dirname((os.getcwd()))+"/data/toy-2d.csv",header=None)
+df=pd.read_csv(os.path.dirname((os.getcwd()))+"/data/s2-4.10000.test.csv",header=None,nrows=2000)
 data=df.values.tolist()
 delta_c=0.01
 m_cubes=int(1/delta_c)
@@ -105,16 +105,6 @@ def get_tau_connected_clusters(M,tau): #get B sets
                         stack.append(other_point)
         B.append(current_cluster)
     return B
-""" 
-I think a possible better and maybe faster alternative is to decompose the space into (hyper-)cubes
-of length tau put every datapoint into a dictionary which maps the index (position) to its cube(-index). 
-We then take a random cube and can enter every contained datapoint to a B cluster and query each of the 3**d-1 
-neighbors of the cube into a stack and check the distance between points in there to the first cube. Iteratively when 
-this is finished and there were points found in the neighboring cubes search these cubes neighbors. cubes 
-already searched during this iteration should be exempt due to redundancy (maybe with list of already searched cubes).
-When this method runs out of unsearched cubes, choose a next random point not contained in this B.  
-
-"""
 def optimized_tau_connected_clusters(M,tau):
     """
     M list
@@ -128,7 +118,7 @@ def optimized_tau_connected_clusters(M,tau):
     
     def get_cube_idx(point):
         #finds the cube a particular point belongs to 
-        return tuple([int(get_coordinate(point,d)/tau) for d in range(dimension)])
+        return tuple([int(get_coordinate(point,d)/(2**.5*tau)) for d in range(dimension)])
     
     for point in M:
         c_idx=get_cube_idx(point)
@@ -137,7 +127,9 @@ def optimized_tau_connected_clusters(M,tau):
 
     offsets=[-1,0,1] #possible entries in x,y,z,... that neighbors of the cube can have to c_idx
 
-    offsets_2d=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] #all 2d neighbors !!! has to be implemented in d dimensions
+    offsets_2d=[[i,j] for i in [-2,-1,0,1,2] for j in [-2,-1,0,1,2]]  #all 2d neighbors !!! has to be implemented in d dimensions
+        # [-1,-1],[-1,0],[-1,1],[0,-1],[0,0],[0,1],[1,-1],[1,0],[1,1]
+        #         [-2,-2],[-2,-1],]
     def get_cube_neighbors():
         return
     visited=set()
@@ -147,39 +139,23 @@ def optimized_tau_connected_clusters(M,tau):
             continue #ensures we only start newq clusters from unvisited points
 
         current_cluster=set()
-        point_stack=[start_point] #again deque
-        visited_cubes=set()
-
+        point_stack=[start_point] #again we can use actual stack maybe
+        
         while point_stack:
-            # print("!!",point_stack)
-            curr_point=point_stack.pop()
-            # print("!",point_stack,curr_point,visited)
-            if curr_point in visited:
-                continue
+            curr_point=point_stack.pop() #remove current point from stack
             visited.add(curr_point)
-            current_cluster.add(curr_point)
-            curr_cube_idx=point_to_cube_index[curr_point]
-            
-            #get cube neighbors
-            cubes_to_check=[curr_cube_idx]+[tuple(curr_cube_idx[d]+offset[d] for d in range(dimension)) for offset in offsets_2d] #will currently not work for d>2
-
-            for cube_idx in cubes_to_check:
-                if cube_idx in visited_cubes: #skip if the cube was already prcessed
+            current_cluster.add(curr_point) #add current point to current cluster
+            curr_cube=point_to_cube_index[curr_point]
+            for offset in offsets_2d:
+                nghbr_cube=tuple(curr_cube[d]+offset[d] for d in range(dimension))
+                if nghbr_cube not in cube_idx_to_point: #skips if cube contains no points
                     continue
-                if cube_idx not in cube_idx_to_point: #skip if cube empty of points
-                    continue
-                
-                for potential_point in cube_idx_to_point[cube_idx]:
-                    if potential_point in visited:
-                        continue
-                    for cluster_point in current_cluster:
-                        if get_distance_sq(cluster_point,potential_point,dimension)<=tau_sq:
-                            point_stack.append(potential_point)
-                            break
-                visited_cubes.add(cube_idx)
-
-
-            visited_cubes.add(curr_cube_idx)
+                potential_points=cube_idx_to_point[nghbr_cube]
+                for point in potential_points:
+                    if point not in visited and get_distance_sq(curr_point,point,dimension)<=tau_sq :
+                        visited.add(point)
+                        point_stack.append(point)
+                        
         B.append(current_cluster)
     return B
 
@@ -215,11 +191,16 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     # find equivalence classes and clusters
     M_current=get_M(data,rho,h_values)
     B_current=optimized_tau_connected_clusters(M_current,tau)
+    print("B_Current",B_current)
+    multiple_clusters=False
     while True:
         M_initial=len(B_current)
+        if M_initial>1:    
+            multiple_clusters=True
         remaining_clusters=drop_clusters(B_current,h_values,data,rho,epsilon)
         M_new=len(remaining_clusters)
-        if M_new==0:
+        
+        if M_new==0 or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
             break
         print(f"rho: {rho}, clusters before drop: {M_initial}, clusters after drop: {M_new})")
         rho+=rho_step
@@ -234,7 +215,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
 
 
 remaining_clusters=0
-remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=5.000001)
+remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=0.4500001)
 print(remaining_clusters)
 #plot clusters
 #%%
@@ -242,16 +223,25 @@ fig,axs=plt.subplots(1,2)
 print(data)
 datax,datay=zip(*data)
 print(len(remaining_clusters))
+# axs[1].plot(datax,datay,"ro",markersize=2)
 for cluster in remaining_clusters:
     print(list(cluster))
     cluster_idxs=list(cluster)
     clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
     # print(clusterdata)
-    axs[0].plot(clusterx,clustery,"o",markersize=2)
-    axs[0].set_xlim(0,1)
-    axs[0].set_ylim(0,1)
+    axs[1].plot(clusterx,clustery,"o",markersize=2)
+    axs[1].set_xlim(0,1)
+    axs[1].set_ylim(0,1)
 
 
-axs[1].plot(datax,datay,"o",markersize=2)
-
+axs[0].plot(datax,datay,"o",markersize=2)
+import numpy as np
+tau_arr=np.arange(0,1,(2**.5*2*0.05))
+delta_arr=np.arange(0,1,(0.05))
+X,Y=np.meshgrid(tau_arr,tau_arr)
+X2,Y2=np.meshgrid(delta_arr,delta_arr)
+# axs[0].plot(X,Y,"ko")
+# axs[0].plot(X2,Y2,"ro")
 # ax.plot(cluster2)
+
+# %%
