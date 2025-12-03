@@ -5,3 +5,9 @@ neighbors of the cube into a stack and check the distance between points in ther
 this is finished and there were points found in the neighboring cubes search these cubes neighbors. cubes 
 already searched during this iteration should be exempt due to redundancy (maybe with list of already searched cubes).
 When this method runs out of unsearched cubes, choose a next random point not contained in this B.  
+
+
+
+
+I think the blocky output when the number of datapoints is high is due to the definition of h_D_delta
+the density becomes very 

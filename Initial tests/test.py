@@ -5,7 +5,8 @@ import pandas as pd
 import os 
 from collections import deque, defaultdict
 
-df=pd.read_csv(os.path.dirname((os.getcwd()))+"/data/s2-4.10000.test.csv",header=None,nrows=2000)
+dataset_name="toy-2d.csv"
+df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}",header=None,nrows=10000)
 data=df.values.tolist()
 delta_c=0.01
 m_cubes=int(1/delta_c)
@@ -82,7 +83,6 @@ def get_tau_connected_clusters(M,tau): #get B sets
     for start_point in M_list:
         if start_point in visited:
             continue #ensures we only start newq clusters from unvisited points
-
         current_cluster=set()
         #stacks
         stack=[start_point]
@@ -92,7 +92,6 @@ def get_tau_connected_clusters(M,tau): #get B sets
                 continue
             visited.add(point)
             current_cluster.add(point)
-
             #find neighbors with distance leq tau
             for other_point in M_list:
                 if other_point not in visited:
@@ -112,13 +111,12 @@ def optimized_tau_connected_clusters(M,tau):
     """
     tau_sq=tau**2
 
-
     cube_idx_to_point=defaultdict(list)
     point_to_cube_index = {}
     
     def get_cube_idx(point):
         #finds the cube a particular point belongs to 
-        return tuple([int(get_coordinate(point,d)/(2**.5*tau)) for d in range(dimension)])
+        return tuple([int(get_coordinate(point,d)/(tau)) for d in range(dimension)])
     
     for point in M:
         c_idx=get_cube_idx(point)
@@ -159,19 +157,11 @@ def optimized_tau_connected_clusters(M,tau):
         B.append(current_cluster)
     return B
 
-        
-
-
 def drop_clusters(B,h_values,data,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε
     remaining_clusters=[]
     for cluster in B:
         max_h=max([h_values[i] for i in cluster])
-        # for point in clusters: #more efficient would be maybe to sort the hvalues of the B set first, if the max h value is smaller we can instantly discard
-        #     idx=data.index(list(point)) #seems to be inefficient since it searches the data array linearly everytime maybe lookuptable 
-        #     if h_values[idx]>=rho+2*epsilon:
-        #         is_higher=True
-        #         break
-        if max_h>=2*rho+epsilon:
+        if max_h>=rho+2*epsilon:
             remaining_clusters.append(cluster)
     return remaining_clusters
 
@@ -182,12 +172,16 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     h_values=[]
     rho=0
 
+    h_max=0
     for x in data:
         h_values.append(h_D_delta(x,data,delta,cubes_dict))
-        h_max=max(h_values)
-        epsilon=epsilon_factor*(h_max/(n*2**d*delta**d))**.5
-        tau=tau_factor*delta
-        rho_step=(n*2**d*delta**d)**-1
+        h_max=max(h_max,max(h_values))
+    for i in range(len(h_values)):
+        h_values[i]*=h_max**.5
+    epsilon=epsilon_factor*(1/(n*2**d*delta**d))**.5
+    tau=tau_factor*delta
+    rho_step=(n*2**d*delta**d)**-1
+
     # find equivalence classes and clusters
     M_current=get_M(data,rho,h_values)
     B_current=optimized_tau_connected_clusters(M_current,tau)
@@ -200,7 +194,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
         remaining_clusters=drop_clusters(B_current,h_values,data,rho,epsilon)
         M_new=len(remaining_clusters)
         
-        if M_new==0 or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
+        if M_new!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
             break
         print(f"rho: {rho}, clusters before drop: {M_initial}, clusters after drop: {M_new})")
         rho+=rho_step
@@ -212,19 +206,32 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     return B_current
 
-
-
 remaining_clusters=0
-remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=0.4500001)
+remaining_clusters=iteration_over_rho(data,delta=0.03,epsilon_factor=3,tau_factor=0.4001)
 print(remaining_clusters)
 #plot clusters
+def save_clusters(clusters):
+    data_copy=data
+    output=[]
+    for cluster_id,cluster in enumerate(clusters):
+        for point in cluster:
+            output.append({"cluster":cluster_id,"idx":point,"coordinate":tuple(get_coordinate(point,d) for d in range(dimension))})
+    df=pd.DataFrame(output)
+    df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
+  .sort_values(by=['freq','cluster'],ascending=[False,True])
+    print(df)
+    df.to_csv(f"out/{dataset_name}")
+save_clusters(remaining_clusters)
+
 #%%
 fig,axs=plt.subplots(1,2)
 print(data)
 datax,datay=zip(*data)
 print(len(remaining_clusters))
-# axs[1].plot(datax,datay,"ro",markersize=2)
+axs[1].plot(datax,datay,"ro",markersize=2)
 for cluster in remaining_clusters:
+    if len(cluster)<20:
+        continue
     print(list(cluster))
     cluster_idxs=list(cluster)
     clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
@@ -243,5 +250,4 @@ X2,Y2=np.meshgrid(delta_arr,delta_arr)
 # axs[0].plot(X,Y,"ko")
 # axs[0].plot(X2,Y2,"ro")
 # ax.plot(cluster2)
-
 # %%
