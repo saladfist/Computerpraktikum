@@ -5,7 +5,7 @@ import pandas as pd
 import os 
 from collections import deque, defaultdict
 
-dataset_name="toy-4d"
+dataset_name="bananas-1-4d_1000"
 df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
 data=df.values.tolist()
 delta_c=0.01
@@ -165,7 +165,7 @@ def optimized_tau_connected_clusters(M,tau):
         B.append(current_cluster)
     return B
 
-def drop_clusters(B,h_values,data,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε
+def drop_clusters(B,h_values,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε
     remaining_clusters=[]
     for cluster in B:
         max_h=max([h_values[i] for i in cluster])
@@ -178,14 +178,12 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     d=len(data[0])
     cubes_dict=precompute_cubes(data,delta,d)
     h_values=[]
-    rho=0
+    rho=26
 
     h_max=0
     for x in data:
         h_values.append(h_D_delta(x,data,delta,cubes_dict))
         h_max=max(h_max,max(h_values))
-    for i in range(len(h_values)):
-        h_values[i]*=h_max**.5
     epsilon=epsilon_factor*(1/(n*2**d*delta**d))**.5
     tau=tau_factor*delta
     rho_step=(n*2**d*delta**d)**-1
@@ -194,12 +192,9 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     M_current=get_M(data,rho,h_values)
     B_current=optimized_tau_connected_clusters(M_current,tau)
     print("B_Current",B_current)
-    multiple_clusters=False
     while True:
         M_initial=len(B_current)
-        if M_initial>1:    
-            multiple_clusters=True
-        remaining_clusters=drop_clusters(B_current,h_values,data,rho,epsilon)
+        remaining_clusters=drop_clusters(B_current,h_values,rho,epsilon)
         M_new=len(remaining_clusters)
         
         if M_new!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
@@ -215,7 +210,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     return B_current
 
 remaining_clusters=0
-remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=2.00001)
+remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=2.0001)
 print(remaining_clusters)
 #plot clusters
 def save_clusters(clusters):
@@ -224,10 +219,14 @@ def save_clusters(clusters):
         for point in cluster:
             output.append({"cluster":cluster_id,"idx":point,"coordinate":[get_coordinate(point,d) for d in range(dimension)]})
     df=pd.DataFrame(output)
+    df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
     df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
   .sort_values(by=['freq','cluster'],ascending=[False,True])
     print(df)
     df.to_csv(f"out/{dataset_name}.csv")
+    # for cluster_id in range(len(clusters)):
+    df[[f"coordinate_{i}" for i in range(dimension)]+["cluster"]].to_csv(f"out/ggobi_{dataset_name}.csv",index=False,header=False)
+    
 save_clusters(remaining_clusters)
 
 #%%
