@@ -1,3 +1,22 @@
 venv
 data
 data/Teil 2_ Datensätze zum Clustering/*
+Initial tests/out/bananas-1-2d.csv
+Initial tests/out/bananas-1-4d_1000.csv
+Initial tests/out/bananas-1-4d.csv
+Initial tests/out/bananas-2-2d
+Initial tests/out/bananas-2-2d.csv
+Initial tests/out/bananas-2-4d.csv
+Initial tests/out/bananas-5-2d
+Initial tests/out/ggobi_bananas-1-2d.csv
+Initial tests/out/ggobi_bananas-1-4d.csv
+Initial tests/out/ggobi_bananas-2-2d.csv
+Initial tests/out/ggobi_bananas-2-4d.csv
+Initial tests/out/ggobi_s2-4.10000.test.csv
+Initial tests/out/ggobi_toy-2d.csv
+Initial tests/out/ggobi_toy-3d.csv
+Initial tests/out/ggobi_toy-4d.csv
+Initial tests/out/s2-4.10000.test.csv
+Initial tests/out/toy-2d.csv
+Initial tests/out/toy-3d.csv
+Initial tests/out/toy-4d.csv

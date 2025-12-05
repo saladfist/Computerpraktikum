@@ -5,28 +5,27 @@ import pandas as pd
 import os 
 from collections import deque, defaultdict
 
-dataset_name="bananas-1-4d_1000"
-df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
+dataset_name="bananas-2-4d"
+df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=1000)
 data=df.values.tolist()
 delta_c=0.01
 m_cubes=int(1/delta_c)
 dimension=len(data[0])
 
 def get_cube_index(point,delta,d=dimension):
-    m=1/delta
+    m=int(1/(2*delta)) #from -1 to 1 so each cube has side length 2*delta
     indices=[]
     #iterate over dimensions to find nearest cube
     for dim in range(d):
-        coord_d=point[dim] # get coordinate in dim d 
+        coord_d=(point[dim]+1)/2 # get coordinate in dim d 
         index=int(coord_d/delta)
-        index=min(index,m-1) # handle boundary
+        index=min(max(index,0),m-1) # handle boundary
         indices.append(index)
     return tuple(indices)
 
 def precompute_cubes(data,delta,d=dimension):
-    m=1/delta
     cubes_dict={} #dictionary to hold the cubes belonging to data points and their counts 
-    for i,point in enumerate(data):
+    for point in data:
         cube_idx=get_cube_index(point,delta,d)
         if cube_idx not in cubes_dict:
             cubes_dict[cube_idx]=0
@@ -34,10 +33,8 @@ def precompute_cubes(data,delta,d=dimension):
     return cubes_dict
 
 def h_D_delta(x, data, delta, precomputed_cubes=None):
-    m=1/delta
     n=len(data)
-    d=len(data[0])
-    
+    d=len(data[0])    
     if precomputed_cubes is None:
         precomputed_cubes=precompute_cubes(data, delta,d)
     # Get the cube index for x
@@ -45,7 +42,7 @@ def h_D_delta(x, data, delta, precomputed_cubes=None):
     # Only count data points in the same cube as x
     h=precomputed_cubes.get(x_cube, 0)
     
-    h/=n*2**d*delta**d
+    h=h/(n*(2*delta)**d)
     return h
 
 x_test=[]
@@ -178,15 +175,15 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     d=len(data[0])
     cubes_dict=precompute_cubes(data,delta,d)
     h_values=[]
-    rho=26
+    rho=0
 
     h_max=0
     for x in data:
         h_values.append(h_D_delta(x,data,delta,cubes_dict))
         h_max=max(h_max,max(h_values))
-    epsilon=epsilon_factor*(1/(n*2**d*delta**d))**.5
+    epsilon=epsilon_factor*(h_max/(n*2**d*delta**d))**.5
     tau=tau_factor*delta
-    rho_step=(n*2**d*delta**d)**-1
+    rho_step=1/(n*(2*delta)**d)
 
     # find equivalence classes and clusters
     M_current=get_M(data,rho,h_values)
@@ -210,7 +207,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     return B_current
 
 remaining_clusters=0
-remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=2.0001)
+remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=1.220001)
 print(remaining_clusters)
 #plot clusters
 def save_clusters(clusters):
@@ -222,12 +219,13 @@ def save_clusters(clusters):
     df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
     df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
   .sort_values(by=['freq','cluster'],ascending=[False,True])
-    print(df)
+    # print(df)
     df.to_csv(f"out/{dataset_name}.csv")
     # for cluster_id in range(len(clusters)):
     df[[f"coordinate_{i}" for i in range(dimension)]+["cluster"]].to_csv(f"out/ggobi_{dataset_name}.csv",index=False,header=False)
     
 save_clusters(remaining_clusters)
+print(len(remaining_clusters),len(remaining_clusters[0]),len(remaining_clusters[1]))
 
 #%%
 if dimension==2:
@@ -237,8 +235,8 @@ if dimension==2:
     print(len(remaining_clusters))
     # axs[1].plot(datax,datay,"ro",markersize=2)
     for cluster in remaining_clusters:
-        if len(cluster)<20:
-            continue
+        # if len(cluster)<20:
+        #     continue
         print(list(cluster))
         cluster_idxs=list(cluster)
         clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
