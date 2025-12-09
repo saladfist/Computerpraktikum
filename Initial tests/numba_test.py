@@ -4,12 +4,26 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os 
 from collections import deque, defaultdict
+from  numba import njit
 
-
-dataset_name="bananas-1-2d"
-df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
-data=df.values.tolist()
+delta_c=0.01
+m_cubes=int(1/delta_c)
 dimension=len(data[0])
+
+
+x_test=[]
+for i in range(m_cubes+1):
+    for j in range(m_cubes+1):
+        x_test.append([i/m_cubes,j/m_cubes])
+
+# cubes_dict=precompute_cubes(data,delta_c,len(data[0]))
+# h=[]
+# for x in x_test:
+#     h.append(h_D_delta(x,data,delta_c,cubes_dict))
+# plt.tricontourf([x[0] for x in x_test],[x[1] for x in x_test],h,cmap="viridis")
+# plt.colorbar()
+# plt.show()
+
 
 def get_cube_index(point,delta,d=dimension):
     m=int(1/(delta)) #from 0 to 1 so each cube has side length delta
@@ -43,38 +57,22 @@ def h_D_delta(x, data, delta, precomputed_cubes=None):
     
     h=h/(n*(delta)**d)
     return h
-
-x_test=[]
-m_cubes=100
-delta_c=0.05
-for i in range(m_cubes+1):
-    for j in range(m_cubes+1):
-        x_test.append([i/m_cubes,j/m_cubes])
-
-
-cubes_dict=precompute_cubes(data,delta_c,len(data[0]))
-h=[]
-for x in x_test:
-    h.append(h_D_delta(x,data,delta_c,cubes_dict))
-plt.tricontourf([x[0] for x in x_test],[x[1] for x in x_test],h,cmap="viridis")
-plt.colorbar()
-plt.show()
-
-def get_coordinate(idx,dim):
+def get_coordinate(data,idx,dim):
     return data[idx][dim]
-def get_distance_sq(p1,p2,dim):
+def get_distance_sq(data,p1,p2,dim):
     dist_2=0
-    for d in range(dimension):
-        dist_2+=(get_coordinate(p1,d)-get_coordinate(p2,d))**2
+    for d in range(dim):
+        dist_2+=(get_coordinate(data,p1,d)-get_coordinate(data,p2,d))**2
     return dist_2
 # iteration over thresholds and find M intervals
-def get_M(data,rho,h_values): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
+def get_M(rho,h_values): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     M=set()
     for i,h in enumerate(h_values):
         if h>=rho:
             M.add(i)
     return list(M)
 
+njit(parallel=True)
 def get_tau_connected_clusters(M,tau): #get B sets 
     visited=set()
     B=[]
@@ -97,13 +95,14 @@ def get_tau_connected_clusters(M,tau): #get B sets
                     #dist=||point-other_point|| maybe more efficient caluclation possivble
                     dist_2=0
                     for d in range(dimension):
-                        dist_2+=(get_coordinate(point,d)-get_coordinate(other_point,d))**2
+                        dist_2+=(get_coordinate(data,point,d)-get_coordinate(data,other_point,d))**2
                     dist=dist_2**.5
                     if dist<=tau:
                         stack.append(other_point)
         B.append(current_cluster)
     return B
 
+njit(parallel=True)
 def optimized_tau_connected_clusters(M,tau):
     """
     M list
@@ -114,10 +113,14 @@ def optimized_tau_connected_clusters(M,tau):
     cube_idx_to_point=defaultdict(list)
     point_to_cube_index = {}
     
+    def get_coordinate(data,idx,dim):
+        return data[idx][dim]
+    njit(parallel=True)
     def get_cube_idx(point):
         #finds the cube a particular point belongs to 
-        return tuple([int(get_coordinate(point,d)/(tau)) for d in range(dimension)])
+        return tuple([int(get_coordinate(data,point,d)/(tau)) for d in range(dimension)])
     
+    njit(parallel=True)
     def get_cube_neighbors(dimension):
         #returns a list of lists with every distance a cube has to its neighbors in d dimensions
         possible_offsets=[-1,0,1] #possible entries in x,y,z,... that neighbors of the cube can have to c_idx
@@ -158,7 +161,7 @@ def optimized_tau_connected_clusters(M,tau):
                     continue
                 potential_points=cube_idx_to_point[nghbr_cube]
                 for point in potential_points:
-                    if point not in visited and get_distance_sq(curr_point,point,dimension)<=tau_sq :
+                    if point not in visited and get_distance_sq(data,curr_point,point,dimension)<=tau_sq :
                         visited.add(point)
                         point_stack.append(point)
                         
@@ -172,24 +175,24 @@ def drop_clusters(B,h_values,rho,epsilon): #drop B if it contains no h with h ge
         if max_h>=rho+2*epsilon:
             remaining_clusters.append(cluster)
     return remaining_clusters
-
+njit(parallel=True)
 def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     n=len(data)
     d=len(data[0])
-    cubes_dict=precompute_cubes(data,delta,d)
     h_values=[]
     rho=0
-
+    
+    
     h_max=0
     for x in data:
-        h_values.append(h_D_delta(x,data,delta,cubes_dict))
+        h_values.append(h_D_delta(x,data,delta))
         h_max=max(h_max,max(h_values))
     epsilon=epsilon_factor*(h_max/(n*delta**d))**.5
     tau=tau_factor*delta
     rho_step=1/(n*(delta)**d)
 
     # find equivalence classes and clusters
-    M_current=get_M(data,rho,h_values)
+    M_current=get_M(rho,h_values)
     B_current=optimized_tau_connected_clusters(M_current,tau)
     print("B_Current",B_current)
     while True:
@@ -204,19 +207,23 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
         if rho>1000:
             Exception("Error: rho zu groß")
         #update M and B for next iteration
-        M_current=get_M(data,rho,h_values)
+        M_current=get_M(rho,h_values)
         B_current=optimized_tau_connected_clusters(M_current,tau)
     
     return B_current
+#%%
+dataset_name="toy-2d"
+df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=2000)
+data=df.values.tolist()
 
-remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=0.6001)
+remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=0.800001)
 print(remaining_clusters)
 #plot clusters
 def save_clusters(clusters):
     output=[]
     for cluster_id,cluster in enumerate(clusters):
         for point in cluster:
-            output.append({"cluster":cluster_id,"idx":point,"coordinate":[get_coordinate(point,d) for d in range(dimension)]})
+            output.append({"cluster":cluster_id,"idx":point,"coordinate":[get_coordinate(data,point,d) for d in range(dimension)]})
     df=pd.DataFrame(output)
     df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
     df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
