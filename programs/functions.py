@@ -6,26 +6,21 @@ import os
 from collections import deque, defaultdict
 
 
-dataset_name="bananas-2-2d"
-df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
-data=df.values.tolist()
-dimension=len(data[0])
-
-def get_cube_index(point,delta,d=dimension):
-    m=int(1/(delta)) #from 0 to 1 so each cube has side length delta
+def get_cube_index(point,delta,d):
+    m=int(1/(delta)) #from -1 to 1 so each cube has side length 2*delta
     indices=[]
     #iterate over dimensions to find nearest cube
     for dim in range(d):
         coord_d=point[dim] # get coordinate in dim d 
-        index=int(coord_d/delta)
+        index=int((coord_d+1)/(2*delta))
         index=min(max(index,0),m-1) # handle boundary
         indices.append(index)
     return tuple(indices)
 
-def precompute_cubes(data,delta,d=dimension):
+def precompute_cubes(data,delta,dimension):
     cubes_dict={} #dictionary to hold the cubes belonging to data points and their counts 
     for point in data:
-        cube_idx=get_cube_index(point,delta,d)
+        cube_idx=get_cube_index(point,delta,dimension)
         if cube_idx not in cubes_dict:
             cubes_dict[cube_idx]=0
         cubes_dict[cube_idx]+=1 # if data in cube +=1
@@ -60,12 +55,12 @@ def h_D_delta(x, data, delta, precomputed_cubes=None):
 # plt.colorbar()
 plt.show()
 
-def get_coordinate(idx,dim):
+def get_coordinate(data,idx,dim):
     return data[idx][dim]
-def get_distance_sq(p1,p2,dim):
+def get_distance_sq(data,p1,p2,dimension):
     dist_2=0
     for d in range(dimension):
-        dist_2+=(get_coordinate(p1,d)-get_coordinate(p2,d))**2
+        dist_2+=(get_coordinate(data,p1,d)-get_coordinate(data,p2,d))**2
     return dist_2
 # iteration over thresholds and find M intervals
 def get_M(data,rho,h_values): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
@@ -75,7 +70,7 @@ def get_M(data,rho,h_values): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
             M.add(i)
     return list(M)
 
-def get_tau_connected_clusters(M,tau): #get B sets 
+def get_tau_connected_clusters(M,tau,dimension): #get B sets 
     visited=set()
     B=[]
     M_list = list(M)
@@ -97,14 +92,14 @@ def get_tau_connected_clusters(M,tau): #get B sets
                     #dist=||point-other_point|| maybe more efficient caluclation possivble
                     dist_2=0
                     for d in range(dimension):
-                        dist_2+=(get_coordinate(point,d)-get_coordinate(other_point,d))**2
+                        dist_2+=(get_coordinate(data,point,d)-get_coordinate(data,other_point,d))**2
                     dist=dist_2**.5
                     if dist<=tau:
                         stack.append(other_point)
         B.append(current_cluster)
     return B
 
-def optimized_tau_connected_clusters(M,tau):
+def optimized_tau_connected_clusters(data,M,tau,dimension):
     """
     M list
     tau float
@@ -116,7 +111,7 @@ def optimized_tau_connected_clusters(M,tau):
     
     def get_cube_idx(point):
         #finds the cube a particular point belongs to 
-        return tuple([int(get_coordinate(point,d)/(tau)) for d in range(dimension)])
+        return tuple([int((get_coordinate(data,point,d)+1)/(2*tau)) for d in range(dimension)])
     
     def get_cube_neighbors(dimension):
         #returns a list of lists with every distance a cube has to its neighbors in d dimensions
@@ -158,7 +153,7 @@ def optimized_tau_connected_clusters(M,tau):
                     continue
                 potential_points=cube_idx_to_point[nghbr_cube]
                 for point in potential_points:
-                    if point not in visited and get_distance_sq(curr_point,point,dimension)<=tau_sq :
+                    if point not in visited and get_distance_sq(data,curr_point,point,dimension)<=tau_sq :
                         visited.add(point)
                         point_stack.append(point)
                         
@@ -176,109 +171,120 @@ def drop_clusters(B,h_values,rho,epsilon): #drop B if it contains no h with h ge
 def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     n=len(data)
     d=len(data[0])
-    cubes_dict=precompute_cubes(data,delta,d)
     h_values=[]
     rho=0
-
+    rho_history=[]
+    B_history=[]
+    
     h_max=0
+    cubes_dict = precompute_cubes(data, delta, d)
     for x in data:
-        h_values.append(h_D_delta(x,data,delta,cubes_dict))
-        h_max=max(h_max,max(h_values))
-    epsilon=epsilon_factor*(h_max/(n*delta**d))**.5
+        h = h_D_delta(x, data, delta, precomputed_cubes=cubes_dict)
+        h_values.append(h)
+        h_max = max(h_max, h)
+    epsilon=epsilon_factor*(h_max/(n*(2*delta)**d))**.5
     tau=tau_factor*delta
-    rho_step=1/(n*(delta)**d)
-
+    rho_step=1/(n*(2*delta)**d)
     # find equivalence classes and clusters
     M_current=get_M(data,rho,h_values)
-    B_current=optimized_tau_connected_clusters(M_current,tau)
-    print("B_Current",B_current)
+    B_current=optimized_tau_connected_clusters(data,M_current,tau,d)
+    # print("B_Current",B_current)
     while True:
-        M_initial=len(B_current)
         remaining_clusters=drop_clusters(B_current,h_values,rho,epsilon)
         M_new=len(remaining_clusters)
         
         if M_new!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
             break
-        print(f"rho: {rho}, clusters before drop: {M_initial}, clusters after drop: {M_new})")
+        # print(f"rho: {rho}, clusters before drop: {M_initial}, clusters after drop: {M_new})")
+        rho_history.append(rho)
+        B_history.append(B_current)
         rho+=rho_step
         if rho>1000:
             Exception("Error: rho zu groß")
         #update M and B for next iteration
         M_current=get_M(data,rho,h_values)
-        B_current=optimized_tau_connected_clusters(M_current,tau)
+        B_current=optimized_tau_connected_clusters(data,M_current,tau,d)
+    return B_current, rho_history,B_history
     
-    return B_current
-
-remaining_clusters=iteration_over_rho(data,delta=0.01,epsilon_factor=3,tau_factor=1.001)
-print(remaining_clusters)
-#plot clusters
-def save_clusters(clusters):
+def save_clusters(data,clusters,dimension,dataset_name):
     output=[]
     for cluster_id,cluster in enumerate(clusters):
         for point in cluster:
-            output.append({"cluster":cluster_id,"idx":point,"coordinate":[get_coordinate(point,d) for d in range(dimension)]})
+            output.append({"cluster":cluster_id,"idx":point,"coordinate":[get_coordinate(data,point,d) for d in range(dimension)]})
     df=pd.DataFrame(output)
     df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
     df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
   .sort_values(by=['freq','cluster'],ascending=[False,True])
-    # print(df)
-    df.to_csv(f"out/{dataset_name}.csv")
-    # for cluster_id in range(len(clusters)):
-    df[[f"coordinate_{i}" for i in range(dimension)]+["cluster"]].to_csv(f"out/ggobi_{dataset_name}.csv",index=False,header=False)
-    
-save_clusters(remaining_clusters)
-# print(len(remaining_clusters),len(remaining_clusters[0]),len(remaining_clusters[1]))
+    df[["cluster"]+[f"coordinate_{i}" for i in range(dimension)]].to_csv(f"cluster-results/team-7-{dataset_name}.result.csv",index=False,header=False)
+        
+def save_log(rho_history,B_history,dataset_name):
+    output=[]
+    for i,rho in enumerate(rho_history):
+        d={"rho":rho}
+        for j,cluster in enumerate(B_history[i]):
+            d[f"B{j}"]=len(cluster)
+        output.append(d)
+    df=pd.DataFrame(output)  
+    df.to_csv(f"cluster-results/team-7-{dataset_name}.log",index=False,header=False)
 
-#%%
-if dimension==2:
-    fig,axs=plt.subplots(1,2)
-    print(data)
-    datax,datay=zip(*data)
-    print(len(remaining_clusters))
-    axs[1].plot(datax,datay,"ro",markersize=2)
-    for cluster in remaining_clusters:
-        # if len(cluster)<20:
-        #     continue
-        print(list(cluster))
-        cluster_idxs=list(cluster)
-        clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
-        # print(clusterdata)
-        axs[1].plot(clusterx,clustery,"o",markersize=2)
-        axs[1].set_xlim(0,1)
-        axs[1].set_ylim(0,1)
+def plot_clusters(data,clusters,dimension):
+    if dimension==2:
+        fig,axs=plt.subplots(1,2)
+        datax,datay=zip(*data)
+        axs[1].plot(datax,datay,"ro",markersize=2)
+        for cluster in clusters:
+            # if len(cluster)<20:
+            #     continue
+            cluster_idxs=list(cluster)
+            clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
+            # print(clusterdata)
+            axs[1].plot(clusterx,clustery,"o",markersize=2)
+            axs[1].set_xlim(0,1)
+            axs[1].set_ylim(0,1)
 
-    axs[0].plot(datax,datay,"o",markersize=2)
-    # import numpy as np
-    # tau_arr=np.arange(0,1,(2**.5*2*0.05))
-    # delta_arr=np.arange(0,1,(0.05))
-    # X,Y=np.meshgrid(tau_arr,tau_arr)
-    # X2,Y2=np.meshgrid(delta_arr,delta_arr)
-    # axs[0].plot(X,Y,"ko")
-    # axs[0].plot(X2,Y2,"ro")
-    # ax.plot(cluster2)
-if dimension==3:
-    print(data)
-    fig=plt.figure()
-    # fig.clf()
-    ax1=fig.add_subplot(221)
-    ax2=fig.add_subplot(222,projection="3d")
-    ax3=fig.add_subplot(223)
-    ax4=fig.add_subplot(224,projection="3d")
-    datax,datay,dataz=zip(*data)
-    print("datax",datax)
-    ax1.tricontourf(datax,datay,dataz)
-    ax2.scatter(datax,datay,dataz,s=1,alpha=0.1)
-    # ax4.scatter(datax,datay,dataz,s=1,alpha=0.05,color="r")
-    for cluster in remaining_clusters:
-        if len(cluster)<20:
-            continue
-        print(list(cluster))
-        cluster_idxs=list(cluster)
-        clusterx,clustery,clusterz=zip(*[(data[idx][0],data[idx][1],data[idx][2]) for idx in cluster_idxs])
-        # print(clusterdata)
-        ax3.tricontourf(clusterx,clustery,clusterz)
-        ax4.scatter(clusterx,clustery,clusterz,s=1,alpha=0.5)
-        ax4.set_xlim(-0.05,1)
-        ax4.set_ylim(-0.05,1)
-        ax4.set_zlim(-0.05,1)
+        axs[0].plot(datax,datay,"o",markersize=2)
+        # import numpy as np
+        # tau_arr=np.arange(0,1,(2**.5*2*0.05))
+        # delta_arr=np.arange(0,1,(0.05))
+        # X,Y=np.meshgrid(tau_arr,tau_arr)
+        # X2,Y2=np.meshgrid(delta_arr,delta_arr)
+        # axs[0].plot(X,Y,"ko")
+        # axs[0].plot(X2,Y2,"ro")
+        # ax.plot(cluster2)
+    if dimension==3:
+        fig=plt.figure()
+        # fig.clf()
+        ax1=fig.add_subplot(221)
+        ax2=fig.add_subplot(222,projection="3d")
+        ax3=fig.add_subplot(223)
+        ax4=fig.add_subplot(224,projection="3d")
+        datax,datay,dataz=zip(*data)
+        # print("datax",datax)
+        ax1.tricontourf(datax,datay,dataz)
+        ax2.scatter(datax,datay,dataz,s=1,alpha=0.1)
+        # ax4.scatter(datax,datay,dataz,s=1,alpha=0.05,color="r")
+        for cluster in remaining_clusters:
+            if len(cluster)<20:
+                continue
+            print(list(cluster))
+            cluster_idxs=list(cluster)
+            clusterx,clustery,clusterz=zip(*[(data[idx][0],data[idx][1],data[idx][2]) for idx in cluster_idxs])
+            # print(clusterdata)
+            ax3.tricontourf(clusterx,clustery,clusterz)
+            ax4.scatter(clusterx,clustery,clusterz,s=1,alpha=0.5)
+            ax4.set_xlim(-0.05,1)
+            ax4.set_ylim(-0.05,1)
+            ax4.set_zlim(-0.05,1)
 # %%
+if __name__=="__main__":
+    dataset_name="bananas-1-2d"
+    df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
+    data=df.values.tolist()
+    dimension=len(data[0])
+
+    
+    remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=2.00001)
+    print(remaining_clusters)
+    # save_clusters(remaining_clusters)
+    if dimension==2 or dimension==3:
+        plot_clusters(data,remaining_clusters,dimension)

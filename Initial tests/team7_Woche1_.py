@@ -6,7 +6,7 @@ import os
 from collections import deque, defaultdict
 
 
-dataset_name="bananas-2-2d"
+dataset_name="bananas-2-4d"
 df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
 data=df.values.tolist()
 dimension=len(data[0])
@@ -209,7 +209,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     return B_current
 
-remaining_clusters=iteration_over_rho(data,delta=0.01,epsilon_factor=3,tau_factor=1.001)
+remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=1.001)
 print(remaining_clusters)
 #plot clusters
 def save_clusters(clusters):
@@ -235,7 +235,7 @@ if dimension==2:
     print(data)
     datax,datay=zip(*data)
     print(len(remaining_clusters))
-    axs[1].plot(datax,datay,"ro",markersize=2)
+    # axs[1].plot(datax,datay,"ro",markersize=2)
     for cluster in remaining_clusters:
         # if len(cluster)<20:
         #     continue
