@@ -16,8 +16,10 @@ if __name__ == "__main__":
     epsilon = args.eps
     tau = args.t
     dataset_name=args.dataset
+    if dataset_name.endswith(".csv"):
+        dataset_name=dataset_name[:-4]
     
-    df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None,nrows=3000)
+    df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None,nrows=4000)
     data=df.values.tolist()
     dimension=len(data[0])
 
@@ -35,5 +37,5 @@ if __name__ == "__main__":
     save_clusters(data,remaining_clusters,dimension,dataset_name)
     save_log(rho_history,B_history,dataset_name)
     if dimension==2 or dimension==3:
-        plot_clusters(data,remaining_clusters,dimension)
+        plot_clusters(data,remaining_clusters,dimension,dataset_name)
     
