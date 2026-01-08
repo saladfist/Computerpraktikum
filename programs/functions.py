@@ -1,41 +1,4 @@
 #! ./venv/bin/python3
-#Verfahren: Zu einem gegebenen Parameter m ∈ N und δ := 1/m wird der Eingaberaum [−1, 1]d zun¨achst
-# schachbrettartig in md viele ∥·∥∞-Kugeln A1, . . . , Amd mit Radius δ zerlegt. ¨Uberschneidungen sind somit nur
-# an den R¨andern erlaubt, idealerweise werden selbst diese ¨Uberschneidungen aber durch geschicktes Weglassen
-# von R¨andern vermieden. Zu einem gegebenen Datensatz D wird dann die Dichtesch¨atzung
-# hD,δ (x) := 1
-# n2dδd
-# md
-# X
-# j=1
-# nX
-# i=1
-# 1Aj (xi)1Aj (x) , x ∈ [−1, 1]d
-# berechnet und f¨ur ein beliebiges ρ ≥ 0 die Menge
-# Mρ := x : hD,δ (x) ≥ ρ
-# betrachtet. F¨ur ein gegebenes τ > 0 werden anschließend die τ -Zusammenhangskomponenten B1, . . . , BM
-# von Mρ bestimmt. Hierbei sind die τ -Zusammenhangskomponenten der Menge Mρ die ¨Aquivalenzklassen
-# bez¨uglich der ¨Aquivalenzrelation
-# x ∼τ y :⇐⇒ ∃k ≥ 1, y0, . . . , yk ∈ Mρ mit
-# y0 = x, yk = y, und ∥yj − yj+1∥ ≤ τ f¨ur alle j = 0, . . . , k − 1 .
-# Schließlich werden die Zusammenhangskomponenten Bl eliminiert, f¨ur die
-# Bl ∩ xi : hD,δ (xi) ≥ ρ + 2ε = ∅
-# gilt. Damit sind f¨ur dieses ρ genau M ′ ≤ M Komponenten ¨ubrig geblieben, die mit ˜B1, . . . , ˜BM ′ bezeichnet
-# werden und Cluster genannt werden.
-# Zu gegebenem δ > 0 und εfactor ≥ 1 und τfactor ≥ 2 sowie hmax := ∥hD,δ ∥∞ und
-# ε := εfactor ·
-# r hmax
-# n2dδd ,
-# τ := τfactor · δ ,
-# ρstep := (n2dδd)−1
-# iteriert das eigentliche Verfahren nun ¨uber ρ = 0, ρstep, 2ρstep, . . . und stoppt, sowie nach der eben beschrie-
-# benen Elimination M ′̸ = 1 gilt. Im Fall M ′ = 0 sollte dann der Datensatz (1, x1), . . . , (1, xn) ausgegeben
-# werden, w¨ahrend im Fall M > 1 der Datensatz (y1, x1), . . . , (yn, xn) ausgegeben werden sollte. Hierbei ist
-# yi = l f¨ur xi ∈ ˜Bl und yi = 0 falls xi in keinem der Cluster liegt.
-# Hinweis: F¨ur fixiertes ρ ≥ 0 ist die Menge Mρ offensichtlich die Vereinigung einiger geeigneter Kugeln
-# Ai1 , . . . , Aik . Die obige ¨Aquivalenzrelation induziert nun eine ¨Aquivalenzrelation auf der Menge Ai1 , . . . , Aik ,
-# die bei der Berechnung der τ -Zusammenhangskomponenten ausgenutzt werden sollte.
-#%%
 import matplotlib.pyplot as plt
 import pandas as pd
 import os 
@@ -291,16 +254,3 @@ def plot_clusters(data,clusters,dimension,dataset_name):
         
         fig2.savefig(f"cluster-results/team-7-{dataset_name}.results.png")
         fig.savefig(f"cluster-results/team-7-{dataset_name}.train.png")
-# %%
-if __name__=="__main__":
-    dataset_name="bananas-1-2d"
-    df=pd.read_csv(os.path.dirname((os.getcwd()))+f"/data/{dataset_name}.csv",header=None,nrows=10000)
-    data=df.values.tolist()
-    dimension=len(data[0])
-
-    
-    remaining_clusters=iteration_over_rho(data,delta=0.05,epsilon_factor=3,tau_factor=2.00001)
-    print(remaining_clusters)
-    # save_clusters(remaining_clusters)
-    if dimension==2 or dimension==3:
-        plot_clusters(data,remaining_clusters,dimension)
