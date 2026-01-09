@@ -29,7 +29,7 @@ if __name__ == "__main__":
     dimension=len(data[0])
 
     start = time.time()
-    remaining_clusters,rho_history,B_history=iteration_over_rho_optimized(data,delta,epsilon,tau)
+    remaining_clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
     end = time.time()
     #print outputs
     print("#"*30)
