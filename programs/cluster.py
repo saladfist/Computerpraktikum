@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import pandas as pd
 import time
@@ -22,21 +21,18 @@ if __name__ == "__main__":
     dataset_name=args.dataset
     if dataset_name.endswith(".csv"):
         dataset_name=dataset_name[:-4]
+        
+    
     if ndata is not None:
         df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None,nrows=ndata)
     else:
         df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None)
     data=df.values.tolist()
     dimension=len(data[0])
-    #if cluster-data and cluster-results folders do not exist, create them
-    if not os.path.exists("cluster-data"):
-        os.makedirs("cluster-data")
-    if not os.path.exists("cluster-results"):
-        os.makedirs("cluster-results")
     start = time.time()
     remaining_clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
     end = time.time()
-    #print outputs
+
     print("#"*30)
     print("Elapsed Time"+"\n"+f"{end-start:.1f}s")
     print("#"*30)

@@ -1,4 +1,3 @@
-#! ./venv/bin/python3
 import matplotlib.pyplot as plt
 import pandas as pd
 import os 
@@ -11,7 +10,7 @@ def get_cubes_dict(data,cube_length,dimension):
     #returns a dictionary with cube indices as keys and counts of datapoints in each cube as values
     cubes_dict={} #dictionary to hold the cubes belonging to data points and their counts 
     for point in range(len(data)):
-        cube_idx=tuple([int((get_coordinate(data,point,d)+1)/(2*cube_length)) for d in range(dimension)])
+        cube_idx=tuple([int((get_coordinate(data,point,d)+1)/(cube_length)) for d in range(dimension)])
         if cube_idx not in cubes_dict:
             cubes_dict[cube_idx]=0
         cubes_dict[cube_idx]+=1 # if data in cube +=1
@@ -36,79 +35,42 @@ def tau_connected_clusters(M,tau,delta,dimension,cubes_dict):
     dimension int
     Returns: list of clusters, where each cluster is a set of cube indices
     """
-    tau_sq = tau**2
     # compute cube center coordinates: center = 2*tau*idx + tau - 1
     def cube_center(c_idx):
-        center=tuple(2 * tau * i + tau - 1 for i in c_idx)
-        # print("c_idx",c_idx,"center",center)
-        return center
-
+        return tuple(-1 + (2*i + 1)*delta for i in c_idx)
     cube_centers = {c: cube_center(c) for c in M}
-    def get_neighbors(dimension):
-        #returns a list of lists with every distance a cube has to its neighbors in d dimensions
-        length=int(tau/(2*delta))
-        possible_offsets=range(-length,length+1) #possible entries in x,y,z,... that neighbors of the cube can have to c_idx
-        def append_offset(ls):
-            new_ls=[]
-            for l in ls:
-                for i in possible_offsets:
-                    new_ls.append(l+[i])
-            return new_ls
-        offsets=[[]]
-        for d in range(dimension):
-            offsets=append_offset(offsets)
-        return offsets
 
-    neighbors=get_neighbors(dimension) #generate neighbors in each dimension [-1,0,1],[[-1,-1],[-1,0],[-1,1],...]
-    # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!neighbors",neighbors)
     # cluster cubes by connectivity of their centers: center-distance <= tau
     visited_cubes = set()
     clusters = []
     for start_cube in M:
         if start_cube in visited_cubes:
             continue
-
         stack = [start_cube]
-        cluster = set([start_cube])
+        cluster = set()
         while stack:
             c = stack.pop()
             if c in visited_cubes:
                 continue
             visited_cubes.add(c)
+            cluster.add(c)
             c_center = cube_centers[c]
-            for n_offset in neighbors:
-                neighbor_idx= tuple(c[d]+n_offset[d] for d in range(dimension))
-                if neighbor_idx in M and neighbor_idx not in visited_cubes:
-                    cluster.add(neighbor_idx) #if neighbor is in M it is automatically tau connected
-                    stack.append(neighbor_idx)
             for other in M:
                 if other in visited_cubes:
                     continue
                 o_center = cube_centers[other]
-                dist_sq = 0.0
-                for d in range(dimension):
-                    dist_sq += (c_center[d] - o_center[d]) ** 2
-                    if dist_sq > tau_sq:
-                        break
-                if dist_sq <= tau_sq and other not in cluster:
-                    cluster.add(other)
+                dist = max(abs(c_center[d] - o_center[d]) for d in range(dimension))
+                if dist <= tau+2*delta:
                     stack.append(other)
 
         clusters.append(cluster)
 
     # order clusters by size (largest first).
-    sorted_clusters = sorted(clusters, key=lambda x: len(x))
+    clusters.sort(key=len, reverse=True)
     #get the number of datapoints in the largest and second largest cluster
     #cubes_dict contains counts of datapoints per cube
-    B1=0
-    B2=0
-    if len(sorted_clusters)>0:
-        for cube in sorted_clusters[0]:
-            B1+=cubes_dict[cube] 
-        
-    if len(sorted_clusters)>1:
-        for cube in sorted_clusters[1]:
-            B2+=cubes_dict[cube]
+    B1 = sum(cubes_dict[c] for c in clusters[0]) if len(clusters) > 0 else 0
+    B2 = sum(cubes_dict[c] for c in clusters[1]) if len(clusters) > 1 else 0
     return clusters, B1, B2
 
 def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε; B contains cube indices
@@ -126,7 +88,7 @@ def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq 
 def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     dimension=len(data[0])
-    cubes_dict = get_cubes_dict(data, delta, dimension)
+    cubes_dict = get_cubes_dict(data, 2*delta, dimension)
 
     #calulate h_values for all data points
     n=len(data)
@@ -150,12 +112,11 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     while True:
         remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon)
         
+        rho_history.append(rho)
+        rho+=rho_step
         B_history.append([B1,B2])
         if len(remaining_clusters)!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
             break
-        
-        rho_history.append(rho)
-        rho+=rho_step
         #update M and B for next iteration
         M_next=get_M(rho,h_dict)
         B_current,B1,B2=tau_connected_clusters(M_next,tau,delta,dimension,cubes_dict)
@@ -172,8 +133,6 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
             B_final.append(point_cluster)
     
     return B_final, rho_history, B_history
-    
-
     
 def save_clusters(data,clusters,dimension,dataset_name):
     output=[]
@@ -209,46 +168,24 @@ def plot_clusters(data,clusters,dimension,dataset_name):
         datax,datay=zip(*data)
         ax2.plot(datax,datay,"ro",markersize=2)
         for cluster in clusters:
-            # if len(cluster)<20:
-            #     continue
             cluster_idxs=list(cluster)
             clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
-            # print(clusterdata)
             ax1.plot(clusterx,clustery,"o",markersize=2)
             ax1.set_xlim(0,1)
             ax1.set_ylim(0,1)
-
-        # axs[0].plot(datax,datay,"o",markersize=2)
         fig.savefig(    f"cluster-results/team-7-{dataset_name}.result.png")
         fig2.savefig(   f"cluster-results/team-7-{dataset_name}.train.png")
-        # import numpy as np
-        # tau_arr=np.arange(0,1,(2**.5*2*0.05))
-        # delta_arr=np.arange(0,1,(0.05))
-        # X,Y=np.meshgrid(tau_arr,tau_arr)
-        # X2,Y2=np.meshgrid(delta_arr,delta_arr)
-        # axs[0].plot(X,Y,"ko")
-        # axs[0].plot(X2,Y2,"ro")
-        # ax.plot(cluster2)
+        
     if dimension==3:
         fig=plt.figure()
         fig2=plt.figure()
-        # fig.clf()
-        # ax1=fig.add_subplot(111)
         ax2=fig.add_subplot(111,projection="3d")
-        # ax3=fig2.add_subplot(223)
         ax4=fig2.add_subplot(111,projection="3d")
         datax,datay,dataz=zip(*data)
-        # print("datax",datax)
-        # ax1.tricontourf(datax,datay,dataz)
         ax2.scatter(datax,datay,dataz,s=1,alpha=0.1)
-        # ax4.scatter(datax,datay,dataz,s=1,alpha=0.05,color="r")
         for cluster in clusters:
-            # if len(cluster)<20:
-            #     continue
             cluster_idxs=list(cluster)
             clusterx,clustery,clusterz=zip(*[(data[idx][0],data[idx][1],data[idx][2]) for idx in cluster_idxs])
-            # print(clusterdata)
-            # ax3.tricontourf(clusterx,clustery,clusterz)
             ax4.scatter(clusterx,clustery,clusterz,s=1,alpha=0.5)
             ax4.set_xlim(-0.05,1)
             ax4.set_ylim(-0.05,1)

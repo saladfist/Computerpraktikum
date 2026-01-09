@@ -1,0 +1,82 @@
+def tau_connected_clusters_neighbors(M,tau,delta,dimension,cubes_dict):
+    """
+    M list of cube indices (as tuples)
+    tau float
+    delta float
+    dimension int
+    Returns: list of clusters, where each cluster is a set of cube indices
+    """
+    tau_sq = tau**2
+    # compute cube center coordinates: center = 2*tau*idx + tau - 1
+    def cube_center(c_idx):
+        center=tuple(2 * tau * i + tau - 1 for i in c_idx)
+        # print("c_idx",c_idx,"center",center)
+        return center
+
+    cube_centers = {c: cube_center(c) for c in M}
+    def get_neighbors(dimension):
+        #returns a list of lists with every distance a cube has to its neighbors in d dimensions
+        length=int(tau/(2*delta))
+        possible_offsets=range(-length,length+1) #possible entries in x,y,z,... that neighbors of the cube can have to c_idx
+        def append_offset(ls):
+            new_ls=[]
+            for l in ls:
+                for i in possible_offsets:
+                    new_ls.append(l+[i])
+            return new_ls
+        offsets=[[]]
+        for d in range(dimension):
+            offsets=append_offset(offsets)
+        return offsets
+
+    neighbors=get_neighbors(dimension) #generate neighbors in each dimension [-1,0,1],[[-1,-1],[-1,0],[-1,1],...]
+    # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!neighbors",neighbors)
+    # cluster cubes by connectivity of their centers: center-distance <= tau
+    visited_cubes = set()
+    clusters = []
+    for start_cube in M:
+        if start_cube in visited_cubes:
+            continue
+
+        stack = [start_cube]
+        cluster = set([start_cube])
+        while stack:
+            c = stack.pop()
+            if c in visited_cubes:
+                continue
+            visited_cubes.add(c)
+            c_center = cube_centers[c]
+            for n_offset in neighbors:
+                neighbor_idx= tuple(c[d]+n_offset[d] for d in range(dimension))
+                if neighbor_idx in M and neighbor_idx not in visited_cubes:
+                    cluster.add(neighbor_idx) #if neighbor is in M it is automatically tau connected
+                    stack.append(neighbor_idx)
+            for other in M:
+                if other in visited_cubes:
+                    continue
+                o_center = cube_centers[other]
+                dist_sq = 0.0
+                for d in range(dimension):
+                    dist_sq += (c_center[d] - o_center[d]) ** 2
+                    if dist_sq > tau_sq:
+                        break
+                if dist_sq <= tau_sq and other not in cluster:
+                    cluster.add(other)
+                    stack.append(other)
+
+        clusters.append(cluster)
+
+    # order clusters by size (largest first).
+    sorted_clusters = sorted(clusters, key=lambda x: len(x))
+    #get the number of datapoints in the largest and second largest cluster
+    #cubes_dict contains counts of datapoints per cube
+    B1=0
+    B2=0
+    if len(sorted_clusters)>0:
+        for cube in sorted_clusters[0]:
+            B1+=cubes_dict[cube] 
+        
+    if len(sorted_clusters)>1:
+        for cube in sorted_clusters[1]:
+            B2+=cubes_dict[cube]
+    return sorted_clusters, B1, B2
