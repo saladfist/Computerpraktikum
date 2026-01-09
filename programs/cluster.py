@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import pandas as pd
 import time
@@ -44,7 +45,7 @@ if __name__ == "__main__":
     for i,cluster in enumerate(remaining_clusters):
         print(f"#{i} \t || {len(cluster)}")
     save_clusters(data,remaining_clusters,dimension,dataset_name)
-    save_log(rho_history,B_history,dataset_name)
+    save_log(rho_history,B_history,end-start,dataset_name)
     if dimension==2 or dimension==3:
         plot_clusters(data,remaining_clusters,dimension,dataset_name)
     

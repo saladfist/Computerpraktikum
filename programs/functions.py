@@ -28,7 +28,7 @@ def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     return M
 
 
-def tau_connected_clusters(M,tau,delta,dimension):
+def tau_connected_clusters(M,tau,delta,dimension,cubes_dict):
     """
     M list of cube indices (as tuples)
     tau float
@@ -96,7 +96,20 @@ def tau_connected_clusters(M,tau,delta,dimension):
 
         clusters.append(cluster)
 
-    return clusters
+    # order clusters by size (largest first).
+    sorted_clusters = sorted(clusters, key=lambda x: len(x))
+    #get the number of datapoints in the largest and second largest cluster
+    #cubes_dict contains counts of datapoints per cube
+    B1=0
+    B2=0
+    if len(sorted_clusters)>0:
+        for cube in sorted_clusters[0]:
+            B1+=cubes_dict[cube] 
+        
+    if len(sorted_clusters)>1:
+        for cube in sorted_clusters[1]:
+            B2+=cubes_dict[cube]
+    return clusters, B1, B2
 
 def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε; B contains cube indices
     remaining_clusters=[]
@@ -132,20 +145,20 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     # find equivalence classes and clusters
     rho=0
     M_init=get_M(rho,h_dict)
-    B_current=tau_connected_clusters(M_init,tau,delta,dimension)
+    B_current,B1,B2=tau_connected_clusters(M_init,tau,delta,dimension,cubes_dict)
     
     while True:
         remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon)
         
+        B_history.append([B1,B2])
         if len(remaining_clusters)!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
             break
         
         rho_history.append(rho)
-        B_history.append(B_current)
         rho+=rho_step
         #update M and B for next iteration
         M_next=get_M(rho,h_dict)
-        B_current=tau_connected_clusters(M_next,tau,delta,dimension)
+        B_current,B1,B2=tau_connected_clusters(M_next,tau,delta,dimension,cubes_dict)
     
     # Convert cube clusters back to point clusters for output
     B_final = []
@@ -173,15 +186,21 @@ def save_clusters(data,clusters,dimension,dataset_name):
   .sort_values(by=['freq','cluster'],ascending=[False,True])
     df[["cluster"]+[f"coordinate_{i}" for i in range(dimension)]].to_csv(f"cluster-results/team-7-{dataset_name}.result.csv",index=False,header=False)
         
-def save_log(rho_history,B_history,dataset_name):
+def save_log(rho_history,B_history,runtime,dataset_name):
     output=[]
     for i,rho in enumerate(rho_history):
         d={"rho":rho}
-        for j,cluster in enumerate(B_history[i]):
-            d[f"B{j}"]=int(len(cluster))
+        d["B0"]=B_history[i][0]
+        d["B1"]=B_history[i][1]
         output.append(d)
     df=pd.DataFrame(output)  
     df.to_csv(f"cluster-results/team-7-{dataset_name}.log",index=False,header=False)
+    output2=[]
+    B1=B_history[-1][0]
+    B2=B_history[-1][1]
+    output2=[{"Laufzeit":runtime,"B1":B1,"B2":B2,"rho_star":rho_history[-1]}]
+    df2=pd.DataFrame(output2)  
+    df2.to_csv(f"cluster-results/team-7-{dataset_name}.result.log",index=False,header=["Laufzeit","B1","B2","rho_star"])
 
 def plot_clusters(data,clusters,dimension,dataset_name):
     if dimension==2:
