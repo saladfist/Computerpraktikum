@@ -27,7 +27,11 @@ if __name__ == "__main__":
         df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None)
     data=df.values.tolist()
     dimension=len(data[0])
-
+    #if cluster-data and cluster-results folders do not exist, create them
+    if not os.path.exists("cluster-data"):
+        os.makedirs("cluster-data")
+    if not os.path.exists("cluster-results"):
+        os.makedirs("cluster-results")
     start = time.time()
     remaining_clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
     end = time.time()

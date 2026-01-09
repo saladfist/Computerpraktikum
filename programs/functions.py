@@ -17,20 +17,6 @@ def get_cubes_dict(data,cube_length,dimension):
         cubes_dict[cube_idx]+=1 # if data in cube +=1
     return cubes_dict
 
-def get_h_D_delta_unnormalized(x, delta, precomputed_cubes):
-    #returns unnormalized h_D,delta(x)
-    # Get the cube index for x
-    cube_idx_of_x = tuple([int(((x_d)+1)/(2*delta)) for x_d in x])
-    # Only count data points in the same cube as x
-    h=precomputed_cubes.get(cube_idx_of_x, 0)
-    
-    return h
-
-def get_distance_sq(data,p1,p2,dimension):
-    dist_2=0
-    for d in range(dimension):
-        dist_2+=(get_coordinate(data,p1,d)-get_coordinate(data,p2,d))**2
-    return dist_2
 # iteration over thresholds and find M intervals
 def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     #M: list of cube indices (as tuples)
@@ -46,12 +32,11 @@ def tau_connected_clusters(M,tau,delta,dimension):
     """
     M list of cube indices (as tuples)
     tau float
+    delta float
     dimension int
     Returns: list of clusters, where each cluster is a set of cube indices
     """
-
     tau_sq = tau**2
-
     # compute cube center coordinates: center = 2*tau*idx + tau - 1
     def cube_center(c_idx):
         center=tuple(2 * tau * i + tau - 1 for i in c_idx)
@@ -113,9 +98,7 @@ def tau_connected_clusters(M,tau,delta,dimension):
 
     return clusters
 
-
-
-def drop_clusters(B,h_dict,rho,epsilon,data,delta,dimension): #drop B if it contains no h with h geq ρ + 2ε; B contains cube indices
+def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε; B contains cube indices
     remaining_clusters=[]
     for cluster in B:
         # For each cube in cluster, find max h-value among points in that cube
@@ -152,7 +135,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     B_current=tau_connected_clusters(M_init,tau,delta,dimension)
     
     while True:
-        remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon,data,delta,dimension)
+        remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon)
         
         if len(remaining_clusters)!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
             break
