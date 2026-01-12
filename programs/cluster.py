@@ -2,6 +2,7 @@ import argparse
 import pandas as pd
 import time
 import os
+import glob
 from functions import * 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -22,11 +23,14 @@ if __name__ == "__main__":
     if dataset_name.endswith(".csv"):
         dataset_name=dataset_name[:-4]
         
-    
+    dataset_path=""
+    for p in glob.iglob(os.path.join("**", f"{dataset_name}.csv"), recursive=True):
+        dataset_path = os.path.abspath(p)
+        break
     if ndata is not None:
-        df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None,nrows=ndata)
+        df=pd.read_csv(dataset_path,header=None,nrows=ndata)
     else:
-        df=pd.read_csv((os.getcwd())+f"/cluster-data/{dataset_name}.csv",header=None)
+        df=pd.read_csv(dataset_path,header=None)
     data=df.values.tolist()
     dimension=len(data[0])
     start = time.time()
