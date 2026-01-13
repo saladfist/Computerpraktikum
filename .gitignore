@@ -1,7 +1,0 @@
-venv
-data
-programs/cluster-data/*
-programs/cluster-results/*
-Initial tests/out/*
-programs/__pycache__/*
-Initial tests/*
