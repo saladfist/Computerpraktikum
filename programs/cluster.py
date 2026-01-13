@@ -4,7 +4,8 @@ import pandas as pd
 import time
 import os
 import glob
-from functions import * 
+from functions import *
+from scipy_clustering import *
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="program to find cluster in a dataset of arbitrary dimension"
@@ -51,6 +52,24 @@ if __name__ == "__main__":
         print(f"optimal delta : {delta_opt} ")
         print("#"*30)
         exit()
+    
+    if args.scipy:
+        print("#"*30)
+        print("Clustering using scipy K-means algorithm...")
+        start_scipy=time.time()
+        clusters=kmeans(data)
+        end_scipy=time.time()
+        print("Elapsed Time"+"\n"+f"{end_scipy-start_scipy:.1f}s")
+        print(f"Number of clusters found = {len(clusters)}")
+        for i,cluster in enumerate(clusters):
+            print(f"#{i} \t || {len(cluster)}")
+        save_clusters(data,clusters,dimension,dataset_name)
+        if dimension==2 or dimension==3:
+            plot_clusters(data,clusters,dimension,dataset_name)
+        exit()
+    
+        
+        
     
     start = time.time()
     remaining_clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)

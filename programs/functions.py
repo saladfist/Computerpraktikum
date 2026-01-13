@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import pandas as pd
 import os 
 from collections import deque, defaultdict
+
 
 def get_coordinate(data,idx,dim):
     return data[idx][dim]
@@ -142,10 +144,14 @@ def determine_optimal_delta(data,epsilon_factor,tau_factor):
     Delta=[0.2, 0.15, 0.1, 0.08, 0.06, 0.04, 0.02]
     rho_stars=[]
     for delta in Delta:
-        _,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
-        rho_stars.append(rho_hist[-1])
-    optimal_delta=Delta[rho_stars.index(max(rho_stars))]
+        B_final,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
+        if len(B_final)>1:
+            rho_stars.append(rho_hist[-1])
+        else: 
+            rho_stars.append(float("inf"))
+    optimal_delta=Delta[rho_stars.index(min(rho_stars))]
     return optimal_delta
+
 
 
 
@@ -178,6 +184,7 @@ def save_log(rho_history,B_history,runtime,dataset_name):
     df2.to_csv(f"cluster-results/team-7-{dataset_name}.result.log",index=False,header=["Laufzeit","B1","B2","rho_star"])
 
 def plot_clusters(data,clusters,dimension,dataset_name):
+    ylorbr = cm.get_cmap('viridis', len(clusters))
     if dimension==2:
         fig,ax1=plt.subplots(1,1)
         fig2,ax2=plt.subplots(1,1)
@@ -186,7 +193,7 @@ def plot_clusters(data,clusters,dimension,dataset_name):
         for cluster in clusters:
             cluster_idxs=list(cluster)
             clusterx,clustery=zip(*[(data[idx][0],data[idx][1]) for idx in cluster_idxs])
-            ax1.plot(clusterx,clustery,"o",markersize=2)
+            ax1.plot(clusterx,clustery,"o",markersize=2,color=ylorbr(clusters.index(cluster)))
             ax1.set_xlim(0,1)
             ax1.set_ylim(0,1)
         fig.savefig(    f"cluster-results/team-7-{dataset_name}.result.png")
@@ -202,7 +209,7 @@ def plot_clusters(data,clusters,dimension,dataset_name):
         for cluster in clusters:
             cluster_idxs=list(cluster)
             clusterx,clustery,clusterz=zip(*[(data[idx][0],data[idx][1],data[idx][2]) for idx in cluster_idxs])
-            ax4.scatter(clusterx,clustery,clusterz,s=1,alpha=0.5)
+            ax4.scatter(clusterx,clustery,clusterz,s=1,alpha=0.5,color=ylorbr(clusters.index(cluster)))
             ax4.set_xlim(-0.05,1)
             ax4.set_ylim(-0.05,1)
             ax4.set_zlim(-0.05,1)
