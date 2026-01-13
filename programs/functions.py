@@ -133,7 +133,23 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
             B_final.append(point_cluster)
     
     return B_final, rho_history, B_history
-    
+
+#TODO: determine quality of clusters
+#TODO: clustering with scipy.cluster
+#TODO: determine optimal parameters delta, epsilon, tau
+
+def determine_optimal_delta(data,epsilon_factor,tau_factor):
+    Delta=[0.2, 0.15, 0.1, 0.08, 0.06, 0.04, 0.02]
+    rho_stars=[]
+    for delta in Delta:
+        _,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
+        rho_stars.append(rho_hist[-1])
+    optimal_delta=Delta[rho_stars.index(max(rho_stars))]
+    return optimal_delta
+
+
+
+
 def save_clusters(data,clusters,dimension,dataset_name):
     output=[]
     for cluster_id,cluster in enumerate(clusters):

@@ -13,9 +13,14 @@ if __name__ == "__main__":
     parser.add_argument("-eps","--epsilon",default=3,type=float       ,help="epsilon parameter for B set calculations (default: 3)")
     parser.add_argument("-t",  "--tau",  default=2,type=float,help="connection length threshold tau (default: 2)")
     parser.add_argument("-ndata",type=int,default=None,help="Number of data points to read from the dataset (default: all)")
+    parser.add_argument("-dd",type=bool,default=False,help="Determine optimal delta using Delta (default: False)")
+    parser.add_argument("-scipy",type=bool,default=False,help="Use scipy.cluster as the clustering algorithm (default: False)")
+    parser.add_argument("-plot",type=bool,default=False,help="Plot the clusters using ggobi-like methods (default: False)")
     parser.add_argument("dataset",type=str,help="Name of the dataset (csv file in cluster-data folder), read as <name> or <name>.csv")
     args = parser.parse_args()
 
+
+    
     delta = args.delta
     epsilon = args.epsilon
     tau = args.tau
@@ -34,6 +39,19 @@ if __name__ == "__main__":
         df=pd.read_csv(dataset_path,header=None)
     data=df.values.tolist()
     dimension=len(data[0])
+    
+    if args.dd:
+        print("#"*30)
+        print("Determining optimal delta...")
+        start_delta_optimization = time.time()
+        delta_opt=determine_optimal_delta(data,epsilon,tau)
+        end_delta_optimization = time.time()
+        print("Elapsed Time"+"\n"+f"{end_delta_optimization-start_delta_optimization:.1f}s")
+        print("#"*30)
+        print(f"optimal delta : {delta_opt} ")
+        print("#"*30)
+        exit()
+    
     start = time.time()
     remaining_clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
     end = time.time()
