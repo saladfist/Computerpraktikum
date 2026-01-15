@@ -1,4 +1,4 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python3 
 import argparse
 import pandas as pd
 import time
@@ -30,10 +30,8 @@ if __name__ == "__main__":
     if dataset_name.endswith(".csv"):
         dataset_name=dataset_name[:-4]
         
-    dataset_path=""
-    for p in glob.iglob(os.path.join("**", f"{dataset_name}.csv"), recursive=True):
-        dataset_path = os.path.abspath(p)
-        break
+    dataset_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), os.path.join("cluster-data", f"{dataset_name}.csv"))
+    # for p
     if ndata is not None:
         df=pd.read_csv(dataset_path,header=None,nrows=ndata)
     else:

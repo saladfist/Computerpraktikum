@@ -9,14 +9,25 @@ def get_coordinate(data,idx,dim):
     return data[idx][dim]
 
 def get_cubes_dict(data,cube_length,dimension):
-    #returns a dictionary with cube indices as keys and counts of datapoints in each cube as values
+    '''
+    data: lsit of data points
+    cube_length: float 2delta
+    dimension: float dimension of data
+    returns:
+    #cubes_dict: a dictionary with cube indices as keys and counts of datapoints in each cube as values
+    #cubes_point_map: a dictionary with each cube containing points with all data point indices in that cube
+    '''
     cubes_dict={} #dictionary to hold the cubes belonging to data points and their counts 
+    cubes_point_map=defaultdict(list)
+    
     for point in range(len(data)):
-        cube_idx=tuple([int((get_coordinate(data,point,d)+1)/(cube_length)) for d in range(dimension)])
+        cube_idx=tuple([int((data[point][d]+1)/(cube_length)) for d in range(dimension)])
         if cube_idx not in cubes_dict:
             cubes_dict[cube_idx]=0
         cubes_dict[cube_idx]+=1 # if data in cube +=1
-    return cubes_dict
+        cubes_point_map[cube_idx].append(point)
+    return cubes_dict, cubes_point_map
+
 
 # iteration over thresholds and find M intervals
 def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
@@ -29,7 +40,7 @@ def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     return M
 
 
-def tau_connected_clusters(M,tau,delta,dimension,cubes_dict):
+def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_point_map):
     """
     M list of cube indices (as tuples)
     tau float
@@ -37,32 +48,44 @@ def tau_connected_clusters(M,tau,delta,dimension,cubes_dict):
     dimension int
     Returns: list of clusters, where each cluster is a set of cube indices
     """
-    # compute cube center coordinates: center = 2*tau*idx + tau - 1
-    def cube_center(c_idx):
-        return tuple(-1 + (2*i + 1)*delta for i in c_idx)
-    cube_centers = {c: cube_center(c) for c in M}
 
-    # cluster cubes by connectivity of their centers: center-distance <= tau
-    visited_cubes = set()
+    # cluster cubes by connectivity of their centers: 
+    # center-distance <= tau -> connected 
+    # center-distance <= tau+2delta -> check wheter these cubes contain points close enough to be connected 
+
+    def cubes_connected(c1,c2):
+        dist=max(abs(c1[d]-c2[d]) for d in range(dimension))
+        if dist<=tau/(2*delta):
+            return True
+        if dist>tau/(2*delta)+1:
+            return False
+        # check whether there exist points x in c1 and y in c2 with distance <=
+        for p1 in cubes_point_map[c1]:
+            for p2 in cubes_point_map[c2]:
+                dist_points=max(abs(data[p1][d]-data[p2][d]) for d in range(dimension))
+                if dist_points<=tau:
+                    return True
+        return False
+        
+    
+    visited = set()
     clusters = []
+    
     for start_cube in M:
-        if start_cube in visited_cubes:
+        if start_cube in visited:
             continue
         stack = [start_cube]
         cluster = set()
+        
         while stack:
             c = stack.pop()
-            if c in visited_cubes:
+            if c in visited:
                 continue
-            visited_cubes.add(c)
+            visited.add(c)
             cluster.add(c)
-            c_center = cube_centers[c]
+            
             for other in M:
-                if other in visited_cubes:
-                    continue
-                o_center = cube_centers[other]
-                dist = max(abs(c_center[d] - o_center[d]) for d in range(dimension))
-                if dist <= tau+2*delta:
+                if other not in visited and cubes_connected(c,other):
                     stack.append(other)
 
         clusters.append(cluster)
@@ -75,6 +98,7 @@ def tau_connected_clusters(M,tau,delta,dimension,cubes_dict):
     B2 = sum(cubes_dict[c] for c in clusters[1]) if len(clusters) > 1 else 0
     return clusters, B1, B2
 
+
 def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε; B contains cube indices
     remaining_clusters=[]
     for cluster in B:
@@ -83,14 +107,14 @@ def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq 
         for point_idx, h in h_dict.items():
             if point_idx in cluster:
                 max_h = max(max_h, h)
-        if max_h >= rho + 2 * epsilon:
+        if max_h >= rho + epsilon:
             remaining_clusters.append(cluster)
     return remaining_clusters
 
 def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     dimension=len(data[0])
-    cubes_dict = get_cubes_dict(data, 2*delta, dimension)
+    cubes_dict,cubes_point_map = get_cubes_dict(data, 2*delta, dimension)
 
     #calulate h_values for all data points
     n=len(data)
@@ -108,27 +132,24 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     B_history=[]
     # find equivalence classes and clusters
     rho=0
-    M_init=get_M(rho,h_dict)
-    B_current,B1,B2=tau_connected_clusters(M_init,tau,delta,dimension,cubes_dict)
     
     while True:
+        M=get_M(rho,h_dict)
+        B_current,B1,B2=tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_point_map)
         remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon)
         
+        if len(remaining_clusters)!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
+            break
         rho_history.append(rho)
         rho+=rho_step
         B_history.append([B1,B2])
-        if len(remaining_clusters)!=1: #or (M_initial==1 and multiple_clusters): # I think if there exist only 1 cluster B and we dont stop the recursion, then we just increase rho until no clusters remain which leads to large gaps in the clusters, might have to think through
-            break
-        #update M and B for next iteration
-        M_next=get_M(rho,h_dict)
-        B_current,B1,B2=tau_connected_clusters(M_next,tau,delta,dimension,cubes_dict)
     
     # Convert cube clusters back to point clusters for output
     B_final = []
     for cube_cluster in B_current:
         point_cluster = set()
         for point_idx in range(len(data)):
-            point_cube = tuple(int((get_coordinate(data, point_idx, d) + 1) / (2 * delta)) for d in range(dimension))
+            point_cube = tuple(int((data[point_idx][d]+1) / (2 * delta)) for d in range(dimension))
             if point_cube in cube_cluster:
                 point_cluster.add(point_idx)
         if point_cluster:
@@ -160,12 +181,14 @@ def save_clusters(data,clusters,dimension,dataset_name):
     output=[]
     for cluster_id,cluster in enumerate(clusters):
         for point in cluster:
-            output.append({"cluster":cluster_id,"idx":point,"coordinate":[get_coordinate(data,point,d) for d in range(dimension)]})
+            output.append({"cluster":cluster_id,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
     df=pd.DataFrame(output)
+    dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
+    
     df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
     df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
   .sort_values(by=['freq','cluster'],ascending=[False,True])
-    df[["cluster"]+[f"coordinate_{i}" for i in range(dimension)]].to_csv(f"cluster-results/team-7-{dataset_name}.result.csv",index=False,header=False)
+    df[["cluster"]+[f"coordinate_{i}" for i in range(dimension)]].to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.csv"),index=False,header=False)
         
 def save_log(rho_history,B_history,runtime,dataset_name):
     output=[]
@@ -175,16 +198,20 @@ def save_log(rho_history,B_history,runtime,dataset_name):
         d["B1"]=B_history[i][1]
         output.append(d)
     df=pd.DataFrame(output)  
-    df.to_csv(f"cluster-results/team-7-{dataset_name}.log",index=False,header=False)
+    dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
+    
+    df.to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.log"),index=False,header=False)
     output2=[]
     B1=B_history[-1][0]
     B2=B_history[-1][1]
     output2=[{"Laufzeit":runtime,"B1":B1,"B2":B2,"rho_star":rho_history[-1]}]
     df2=pd.DataFrame(output2)  
-    df2.to_csv(f"cluster-results/team-7-{dataset_name}.result.log",index=False,header=["Laufzeit","B1","B2","rho_star"])
+    df2.to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.log"),index=False,header=["Laufzeit","B1","B2","rho_star"])
 
 def plot_clusters(data,clusters,dimension,dataset_name):
     ylorbr = cm.get_cmap('viridis', len(clusters))
+    dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
+    
     if dimension==2:
         fig,ax1=plt.subplots(1,1)
         fig2,ax2=plt.subplots(1,1)
@@ -196,8 +223,8 @@ def plot_clusters(data,clusters,dimension,dataset_name):
             ax1.plot(clusterx,clustery,"o",markersize=2,color=ylorbr(clusters.index(cluster)))
             ax1.set_xlim(0,1)
             ax1.set_ylim(0,1)
-        fig.savefig(    f"cluster-results/team-7-{dataset_name}.result.png")
-        fig2.savefig(   f"cluster-results/team-7-{dataset_name}.train.png")
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.png"))
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train.png"))
         
     if dimension==3:
         fig=plt.figure()
@@ -214,5 +241,5 @@ def plot_clusters(data,clusters,dimension,dataset_name):
             ax4.set_ylim(-0.05,1)
             ax4.set_zlim(-0.05,1)
         
-        fig2.savefig(f"cluster-results/team-7-{dataset_name}.results.png")
-        fig.savefig(f"cluster-results/team-7-{dataset_name}.train.png")
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.png"))
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train.png"))
