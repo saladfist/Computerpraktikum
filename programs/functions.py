@@ -5,9 +5,6 @@ import os
 from collections import deque, defaultdict
 
 
-def get_coordinate(data,idx,dim):
-    return data[idx][dim]
-
 def get_cubes_dict(data,cube_length,dimension):
     '''
     data: lsit of data points
@@ -19,6 +16,7 @@ def get_cubes_dict(data,cube_length,dimension):
     '''
     cubes_dict={} #dictionary to hold the cubes belonging to data points and their counts 
     cubes_point_map=defaultdict(list)
+    cubes_coords_map={}
     
     for point in range(len(data)):
         cube_idx=tuple([int((data[point][d]+1)/(cube_length)) for d in range(dimension)])
@@ -26,9 +24,14 @@ def get_cubes_dict(data,cube_length,dimension):
             cubes_dict[cube_idx]=0
         cubes_dict[cube_idx]+=1 # if data in cube +=1
         cubes_point_map[cube_idx].append(point)
-    return cubes_dict, cubes_point_map
+    for cube,points in cubes_point_map.items():
+        #get as entry to the cube a tuple which contains 2*dimension values which correspond to the min and max coordinate of points in each dimension
+        min_coords=[min(data[p][d] for p in points) for d in range(dimension)]
+        max_coords=[max(data[p][d] for p in points) for d in range(dimension)]
+        cubes_coords_map[cube]=(tuple(min_coords),tuple(max_coords))
+    #we only need the points which are the closest to the cube edges
 
-
+    return cubes_dict, cubes_coords_map
 # iteration over thresholds and find M intervals
 def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     #M: list of cube indices (as tuples)
@@ -40,7 +43,7 @@ def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     return M
 
 
-def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_point_map):
+def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_coords_map):
     """
     M list of cube indices (as tuples)
     tau float
@@ -54,18 +57,22 @@ def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_point_map
     # center-distance <= tau+2delta -> check wheter these cubes contain points close enough to be connected 
 
     def cubes_connected(c1,c2):
-        dist=max(abs(c1[d]-c2[d]) for d in range(dimension))
-        if dist<=tau/(2*delta):
+        dist=[c1[d]-c2[d] for d in range(dimension)]
+        dist_abs=max(abs(_) for _ in dist)
+        if dist_abs<=tau/(2*delta):
             return True
-        if dist>tau/(2*delta)+1:
+        if dist_abs>tau/(2*delta)+1:
             return False
         # check whether there exist points x in c1 and y in c2 with distance <=
-        for p1 in cubes_point_map[c1]:
-            for p2 in cubes_point_map[c2]:
-                dist_points=max(abs(data[p1][d]-data[p2][d]) for d in range(dimension))
-                if dist_points<=tau:
-                    return True
-        return False
+        
+        c1_min,c1_max=cubes_coords_map[c1]
+        c2_min,c2_max=cubes_coords_map[c2]
+        
+        for d in range(dimension):
+            if c1_min[d]>c2_max[d]+tau or c2_min[d]>c1_max[d]+tau:
+                return False 
+        return True
+        
         
     
     visited = set()
@@ -146,7 +153,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     # Convert cube clusters back to point clusters for output
     B_final = []
-    for cube_cluster in B_current:
+    for cube_cluster in remaining_clusters:
         point_cluster = set()
         for point_idx in range(len(data)):
             point_cube = tuple(int((data[point_idx][d]+1) / (2 * delta)) for d in range(dimension))
