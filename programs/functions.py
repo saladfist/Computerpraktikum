@@ -248,5 +248,5 @@ def plot_clusters(data,clusters,dimension,dataset_name):
             ax4.set_ylim(-0.05,1)
             ax4.set_zlim(-0.05,1)
         
-        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.png"))
-        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train.png"))
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train.png"))
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.png"))
