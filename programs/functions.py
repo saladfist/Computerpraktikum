@@ -215,9 +215,10 @@ def save_log(rho_history,B_history,runtime,dataset_name):
     df2=pd.DataFrame(output2)  
     df2.to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.log"),index=False,header=["Laufzeit","B1","B2","rho_star"])
 
-def plot_clusters(data,clusters,dimension,dataset_name):
+def plot_clusters(data,clusters,dimension,dataset_name,kmeans_used=False):
     ylorbr = cm.get_cmap('viridis', len(clusters))
     dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
+    add_name="_kmeans" if kmeans_used else ""
     
     if dimension==2:
         fig,ax1=plt.subplots(1,1)
@@ -230,8 +231,8 @@ def plot_clusters(data,clusters,dimension,dataset_name):
             ax1.plot(clusterx,clustery,"o",markersize=2,color=ylorbr(clusters.index(cluster)))
             ax1.set_xlim(0,1)
             ax1.set_ylim(0,1)
-        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.png"))
-        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train.png"))
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result"+add_name+".png"))
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train"+add_name+".png"))
         
     if dimension==3:
         fig=plt.figure()
@@ -248,5 +249,5 @@ def plot_clusters(data,clusters,dimension,dataset_name):
             ax4.set_ylim(-0.05,1)
             ax4.set_zlim(-0.05,1)
         
-        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train.png"))
-        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.png"))
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train"+add_name+".png"))
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result"+add_name+".png"))

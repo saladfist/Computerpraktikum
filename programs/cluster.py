@@ -14,12 +14,16 @@ if __name__ == "__main__":
     parser.add_argument("-eps","--epsilon",default=3,type=float       ,help="epsilon parameter for B set calculations (default: 3)")
     parser.add_argument("-t",  "--tau",  default=2,type=float,help="connection length threshold tau (default: 2)")
     parser.add_argument("-ndata",type=int,default=None,help="Number of data points to read from the dataset (default: all)")
-    parser.add_argument("-dd",type=bool,default=False,help="Determine optimal delta using Delta (default: False)")
-    parser.add_argument("-scipy",type=bool,default=False,help="Use scipy.cluster as the clustering algorithm (default: False)")
+    # parser.add_argument("-dd",type=bool,default=False,help="Determine optimal delta using Delta (default: False)")
     parser.add_argument("-plot",type=bool,default=False,help="Plot the clusters using ggobi-like methods (default: False)")
     parser.add_argument("dataset",type=str,help="Name of the dataset (csv file in cluster-data folder), read as <name> or <name>.csv")
-    args = parser.parse_args()
+    
+    parser.add_argument('--dd', dest="determine_optimal_delta",action='store_true',help="Determine optimal delta using Delta (default: False)")
+    parser.set_defaults(determine_optimal_delta=False)
+    parser.add_argument("--kmeans",dest="kmeans_clustering",action="store_true",help="Use scipy.cluster as the clustering algorithm (default: False)")
+    parser.set_defaults(kmeans_clustering=False)
 
+    args = parser.parse_args()
 
     
     delta = args.delta
@@ -39,7 +43,10 @@ if __name__ == "__main__":
     data=df.values.tolist()
     dimension=len(data[0])
     
-    if args.dd:
+    standard_clustering=True
+    if args.determine_optimal_delta or args.kmeans_clustering:
+        standard_clustering=False
+    if args.determine_optimal_delta:
         print("#"*30)
         print("Determining optimal delta...")
         start_delta_optimization = time.time()
@@ -51,7 +58,7 @@ if __name__ == "__main__":
         print("#"*30)
         exit()
     
-    if args.scipy:
+    if args.kmeans_clustering:
         print("#"*30)
         print("Clustering using scipy K-means algorithm...")
         start_scipy=time.time()
@@ -64,24 +71,23 @@ if __name__ == "__main__":
         save_clusters(data,clusters,dimension,dataset_name)
         if dimension==2 or dimension==3:
             plot_clusters(data,clusters,dimension,dataset_name)
-        exit()
     
         
         
-    
-    start = time.time()
-    remaining_clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
-    end = time.time()
+    if standard_clustering:
+        start = time.time()
+        clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
+        end = time.time()
 
-    print("#"*30)
-    print("Elapsed Time"+"\n"+f"{end-start:.1f}s")
-    print("#"*30)
-    print(f"Number of clusters found = {len(remaining_clusters)}")
-    print("Cluster  || size")
-    for i,cluster in enumerate(remaining_clusters):
-        print(f"#{i} \t || {len(cluster)}")
-    save_clusters(data,remaining_clusters,dimension,dataset_name)
-    save_log(rho_history,B_history,end-start,dataset_name)
+        print("#"*30)
+        print("Elapsed Time"+"\n"+f"{end-start:.1f}s")
+        print("#"*30)
+        print(f"Number of clusters found = {len(clusters)}")
+        print("Cluster  || size")
+        for i,cluster in enumerate(clusters):
+            print(f"#{i} \t || {len(cluster)}")
+        save_clusters(data,clusters,dimension,dataset_name)
+        save_log(rho_history,B_history,end-start,dataset_name)
     if dimension==2 or dimension==3:
-        plot_clusters(data,remaining_clusters,dimension,dataset_name)
+        plot_clusters(data,clusters,dimension,dataset_name,kmeans_used=args.kmeans_clustering)
     
