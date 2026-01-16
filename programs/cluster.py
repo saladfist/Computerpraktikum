@@ -66,17 +66,18 @@ if __name__ == "__main__":
         end_scipy=time.time()
         print("Elapsed Time"+"\n"+f"{end_scipy-start_scipy:.1f}s")
         print(f"Number of clusters found = {len(clusters)}")
-        for i,cluster in enumerate(clusters):
+        ordered_clusters=sorted(clusters,key=lambda x:len(x),reverse=True)
+        for i,cluster in enumerate(ordered_clusters):
             print(f"#{i} \t || {len(cluster)}")
-        save_clusters(data,clusters,dimension,dataset_name)
+        save_clusters(data,clusters,[],dimension,dataset_name)
         if dimension==2 or dimension==3:
-            plot_clusters(data,clusters,dimension,dataset_name)
+            plot_clusters(data,clusters,[],dimension,dataset_name)
     
         
         
     if standard_clustering:
         start = time.time()
-        clusters,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
+        clusters,unclustered_points,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
         end = time.time()
 
         print("#"*30)
@@ -84,10 +85,11 @@ if __name__ == "__main__":
         print("#"*30)
         print(f"Number of clusters found = {len(clusters)}")
         print("Cluster  || size")
-        for i,cluster in enumerate(clusters):
+        ordered_clusters=sorted(clusters,key=lambda x:len(x),reverse=True)
+        for i,cluster in enumerate(ordered_clusters):
             print(f"#{i} \t || {len(cluster)}")
-        save_clusters(data,clusters,dimension,dataset_name)
+        save_clusters(data,clusters,unclustered_points,dimension,dataset_name)
         save_log(rho_history,B_history,end-start,dataset_name)
-    if dimension==2 or dimension==3:
-        plot_clusters(data,clusters,dimension,dataset_name,kmeans_used=args.kmeans_clustering)
-    
+        if dimension==2 or dimension==3:
+            plot_clusters(data,clusters,unclustered_points,dimension,dataset_name,kmeans_used=args.kmeans_clustering)
+        
