@@ -239,8 +239,8 @@ def plot_clusters(data,clusters,unclustered_points,dimension,dataset_name,kmeans
             ax1.set_xlim(0,1)
             ax1.set_ylim(0,1)
         ax1.plot([data[idx][0] for idx in unclustered_points],[data[idx][1] for idx in unclustered_points],"ko",markersize=2,alpha=0.1)
-        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result"+add_name+".png"))
-        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train"+add_name+".png"))
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result"+add_name+".png"),dpi=500)
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train"+add_name+".png"),dpi=500)
         
     if dimension==3:
         fig=plt.figure()
@@ -262,5 +262,5 @@ def plot_clusters(data,clusters,unclustered_points,dimension,dataset_name,kmeans
                     "o",color="k",s=1,alpha=0.1)
             
         
-        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train"+add_name+".png"))
-        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result"+add_name+".png"))
+        fig.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.train"+add_name+".png"),dpi=500)
+        fig2.savefig(os.path.join(dataresults_path,f"team-7-{dataset_name}.result"+add_name+".png"),dpi=500)
