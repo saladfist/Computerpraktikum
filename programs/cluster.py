@@ -52,7 +52,7 @@ if __name__ == "__main__":
         start_delta_optimization = time.time()
         delta_opt=determine_optimal_delta(data,epsilon,tau)
         end_delta_optimization = time.time()
-        print("Elapsed Time"+"\n"+f"{end_delta_optimization-start_delta_optimization:.1f}s")
+        print("Elapsed Time"+"\n"+f"{end_delta_optimization-start_delta_optimization:.3f}s")
         print("#"*30)
         print(f"optimal delta : {delta_opt} ")
         print("#"*30)
@@ -64,7 +64,7 @@ if __name__ == "__main__":
         start_scipy=time.time()
         clusters=kmeans(data)
         end_scipy=time.time()
-        print("Elapsed Time"+"\n"+f"{end_scipy-start_scipy:.1f}s")
+        print("Elapsed Time"+"\n"+f"{end_scipy-start_scipy:.3f}s")
         print(f"Number of clusters found = {len(clusters)}")
         ordered_clusters=sorted(clusters,key=lambda x:len(x),reverse=True)
         for i,cluster in enumerate(ordered_clusters):
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         end = time.time()
 
         print("#"*30)
-        print("Elapsed Time"+"\n"+f"{end-start:.1f}s")
+        print("Elapsed Time"+"\n"+f"{end-start:.3f}s")
         print("#"*30)
         print(f"Number of clusters found = {len(clusters)}")
         print("Cluster  || size")
