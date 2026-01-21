@@ -220,7 +220,7 @@ def save_log(rho_history,B_history,runtime,dataset_name):
     B2=B_history[-1][1]
     output2=[{"Laufzeit":runtime,"B1":B1,"B2":B2,"rho_star":rho_history[-1]}]
     df2=pd.DataFrame(output2)  
-    df2.to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.log"),index=False,header=["Laufzeit","B1","B2","rho_star"])
+    df2.to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.log"),index=False,header=False)
 
 def plot_clusters(data,clusters,unclustered_points,dimension,dataset_name,kmeans_used=False):
     ylorbr = cm.get_cmap('viridis', len(clusters))
