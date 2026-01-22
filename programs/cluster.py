@@ -62,16 +62,19 @@ if __name__ == "__main__":
         print("#"*30)
         print("Clustering using scipy K-means algorithm...")
         start_scipy=time.time()
-        clusters=kmeans(data)
+        data_dict=kmeans(data)
+        
         end_scipy=time.time()
+        clusters=df[df["cluster"]!=0].groupby("cluster")["idx"].apply(list).tolist()
+        df=pd.DataFrame(data_dict.values())
         print("Elapsed Time"+"\n"+f"{end_scipy-start_scipy:.3f}s")
         print(f"Number of clusters found = {len(clusters)}")
         ordered_clusters=sorted(clusters,key=lambda x:len(x),reverse=True)
         for i,cluster in enumerate(ordered_clusters):
             print(f"#{i} \t || {len(cluster)}")
-        save_clusters(data,clusters,[],dimension,dataset_name)
+        save_clusters(df,dimension,dataset_name)
         if dimension==2 or dimension==3:
-            plot_clusters(data,clusters,[],dimension,dataset_name)
+            plot_clusters(df,dimension,dataset_name)
     
         
         

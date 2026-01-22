@@ -6,7 +6,9 @@ import numpy as np
 
 def kmeans(data,max_k=12,n_iter=5):
     data_array=pd.DataFrame(data).to_numpy()
-    
+    data_dict={}
+    for i,data_point in enumerate(data):
+        data_dict[i]={"cluster":0,"idx":i,"coordinate":data_point}# 0 for unclustered
     #elbow method to determine optimal k for k-means
     K=range(1,max_k)
     inertias=[]
@@ -39,7 +41,9 @@ def kmeans(data,max_k=12,n_iter=5):
                 break
     optimal_centroids,optimal_labels=cluster.vq.kmeans2(data_array,optimal_k)
     clusters=[]
-    for i in range(optimal_k):
-        cluster_i=set(np.where(optimal_labels==i)[0].tolist())
-        clusters.append(cluster_i)
-    return clusters
+    for i in range(len(data)):
+        data_dict[i]["cluster"]=optimal_labels[i]+1 #clusters numbered from 1 to optimal_k
+    # for i in range(optimal_k):
+    #     cluster_i=set(np.where(optimal_labels==i)[0].tolist())
+    #     clusters.append(cluster_i)
+    return data_dict

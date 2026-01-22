@@ -163,11 +163,12 @@ def determine_optimal_delta(data,epsilon_factor,tau_factor):
     rho_stars=[]
     for delta in Delta:
         data_dict,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
+        clusters=pd.DataFrame(data_dict.values()).groupby("cluster")["idx"].apply(list).tolist()
         #####################FIX THIS#############################
-        # if len(data_dict.get("cluster"))>1:
-        #     rho_stars.append(rho_hist[-1])
-        # else: 
-        #     rho_stars.append(float("inf"))
+        if len(clusters)>1:
+            rho_stars.append(rho_hist[-1])
+        else: 
+            rho_stars.append(float("inf"))
     optimal_delta=Delta[rho_stars.index(min(rho_stars))]
     return optimal_delta
 
