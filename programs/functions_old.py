@@ -13,10 +13,11 @@ def get_cubes_dict(data,cube_length,dimension):
     returns:
     #cubes_dict: a dictionary with cube indices as keys and counts of datapoints in each cube as values
     #cubes_point_map: a dictionary with each cube containing points with all data point indices in that cube
-    #cubes_coords: a dictionary with each cube middle point coordinates as values
+    #cubes_coords_map: a dictionary with each cube containing the min and max coordinates of points in that cube
     '''
     cubes_dict={} #dictionary to hold the cubes belonging to data points and their counts 
     cubes_point_map=defaultdict(list)
+    cubes_coords_map={}
     
     for point in range(len(data)):
         cube_idx=tuple([int((data[point][d]+1)/(cube_length)) for d in range(dimension)])
@@ -24,12 +25,15 @@ def get_cubes_dict(data,cube_length,dimension):
             cubes_dict[cube_idx]=0
         cubes_dict[cube_idx]+=1 # if data in cube +=1
         cubes_point_map[cube_idx].append(point)
-    def cube_center(c_idx):
-        return tuple(-1+(i+1/2)*cube_length for i in c_idx)
-    cubes_centers = {c: cube_center(c) for c in cubes_dict.keys()}
+    for cube,points in cubes_point_map.items():
+        #get as entry to the cube a tuple which contains 2*dimension values which correspond to the min and max coordinate of points in each dimension
+        min_coords=[min(data[p][d] for p in points) for d in range(dimension)]
+        max_coords=[max(data[p][d] for p in points) for d in range(dimension)]
+        cubes_coords_map[cube]=(tuple(min_coords),tuple(max_coords))
+    #we only need the points which are the closest to the cube edges
 
-    return cubes_dict,cubes_point_map, cubes_centers
-
+    return cubes_dict,cubes_point_map, cubes_coords_map
+# iteration over thresholds and find M intervals
 def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     #M: list of cube indices (as tuples)
     #not_M: list of cube indices (as tuples)
@@ -45,7 +49,7 @@ def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
     return M,not_M
 
 
-def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_centers):
+def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_coords_map):
     """
     M list of cube indices (as tuples)
     tau float
@@ -61,9 +65,21 @@ def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_centers):
     def cubes_connected(c1,c2):
         dist=[c1[d]-c2[d] for d in range(dimension)]
         dist_abs=max(abs(_) for _ in dist)
-        if dist_abs<(tau)/(2*delta)+1:
-            return True        
-        return False
+        if dist_abs<=tau/(2*delta):
+            return True
+        if dist_abs>tau/(2*delta)+1:
+            return False
+        # check whether there exist points x in c1 and y in c2 with distance <=
+        
+        c1_min,c1_max=cubes_coords_map[c1]
+        c2_min,c2_max=cubes_coords_map[c2]
+        
+        for d in range(dimension):
+            if c1_min[d]>c2_max[d]+tau or c2_min[d]>c1_max[d]+tau:
+                return False 
+        return True
+        
+        
     
     visited = set()
     clusters = []
@@ -111,14 +127,11 @@ def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq 
 def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     dimension=len(data[0])
-    cubes_dict,cubes_point_map,cubes_centers = get_cubes_dict(data, 2*delta, dimension)
+    cubes_dict,cubes_point_map,cubes_coords_map = get_cubes_dict(data, 2*delta, dimension)
 
     #calulate h_values for all data points
     n=len(data)
     h_dict={}
-    data_dict={}
-    for i,data_point in enumerate(data):
-        data_dict[i]={"cluster":0,"idx":i,"coordinate":data_point}# 0 for unclustered
     for x in data:
         cube_idx_of_x = tuple([int(((x_d)+1)/(2*delta)) for x_d in x])
         h_dict[cube_idx_of_x]=cubes_dict.get(cube_idx_of_x, 0)/(n*2**dimension*delta**dimension)
@@ -135,7 +148,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     while True:
         M,not_M=get_M(rho,h_dict)
-        B_current,B1,B2=tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_centers)
+        B_current,B1,B2=tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_coords_map)
         remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon)
         
         rho_history.append(rho)
@@ -144,15 +157,22 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
             break
         rho+=rho_step
     
-    # remaining clusters are sets of cube indices; assign cluster ids starting at 1
-    for cid, cube_cluster in enumerate(remaining_clusters, start=1):
-        for cube_idx in cube_cluster:
-            for point_idx in cubes_point_map.get(cube_idx, ()):  # iterate only points in this cube
-                data_dict[point_idx]["cluster"] = cid
-
-    # We no longer need to explicitly collect unclustered points here: they keep cluster==0 in data_dict
-
-    return data_dict, rho_history, B_history
+    # Convert cube clusters back to point clusters for output
+    B_final = []
+    unclustered_points =[]
+    for cube_cluster in remaining_clusters:
+        point_cluster = set()
+        for point_idx in range(len(data)):
+            point_cube = tuple(int((data[point_idx][d]+1) / (2 * delta)) for d in range(dimension))
+            if point_cube in cube_cluster:
+                point_cluster.add(point_idx)
+        if point_cluster:
+            B_final.append(point_cluster)
+    for cube_idx in not_M:
+        for point_idx in cubes_point_map[cube_idx]:
+            unclustered_points.append(point_idx)
+    
+    return B_final,unclustered_points, rho_history, B_history
 
 #TODO: determine quality of clusters
 #TODO: clustering with scipy.cluster
@@ -162,31 +182,28 @@ def determine_optimal_delta(data,epsilon_factor,tau_factor):
     Delta=[0.2, 0.15, 0.1, 0.08, 0.06, 0.04, 0.02]
     rho_stars=[]
     for delta in Delta:
-        data_dict,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
-        #####################FIX THIS#############################
-        # if len(data_dict.get("cluster"))>1:
-        #     rho_stars.append(rho_hist[-1])
-        # else: 
-        #     rho_stars.append(float("inf"))
+        B_final,_,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
+        if len(B_final)>1:
+            rho_stars.append(rho_hist[-1])
+        else: 
+            rho_stars.append(float("inf"))
     optimal_delta=Delta[rho_stars.index(min(rho_stars))]
     return optimal_delta
 
 
-def save_clusters(df,dimension,dataset_name):
+def save_clusters(data,clusters,unclustered_points,dimension,dataset_name):
     output=[]
-    
-    # for cluster_id,cluster in enumerate(clusters):
-    #     for point in cluster:
-    #         output.append({"cluster":cluster_id+1,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
-    # for point in unclustered_points:
-    #     output.append({"cluster":0,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
+    for cluster_id,cluster in enumerate(clusters):
+        for point in cluster:
+            output.append({"cluster":cluster_id+1,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
+    for point in unclustered_points:
+        output.append({"cluster":0,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
+    df=pd.DataFrame(output)
     dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
     
-    # print(df.groupby("idx").head())
-    # print(df[["cluster","coordinate"]].head())
     df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
-    # df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
-#   .sort_values(by=['freq','cluster'],ascending=[False,True])
+    df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
+  .sort_values(by=['freq','cluster'],ascending=[False,True])
     df[["cluster"]+[f"coordinate_{i}" for i in range(dimension)]].to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.csv"),index=False,header=False)
         
 def save_log(rho_history,B_history,runtime,dataset_name):
@@ -207,15 +224,11 @@ def save_log(rho_history,B_history,runtime,dataset_name):
     df2=pd.DataFrame(output2)  
     df2.to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.log"),index=False,header=False)
 
-def plot_clusters(df,dimension,dataset_name,kmeans_used=False):
+def plot_clusters(data,clusters,unclustered_points,dimension,dataset_name,kmeans_used=False):
+    ylorbr = cm.get_cmap('viridis', len(clusters))
     dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
     add_name="_kmeans" if kmeans_used else ""
     
-    clusters=df[df["cluster"]!=0].groupby("cluster")["idx"].apply(list).tolist()
-    unclustered_points=df[df["cluster"]==0]["idx"].tolist()
-    data=df[["coordinate"]].values.tolist()
-    data=[data[i][0] for i in range(len(data))]
-    ylorbr = cm.get_cmap('viridis', len(clusters))
     if dimension==2:
         fig,ax1=plt.subplots(1,1)
         fig2,ax2=plt.subplots(1,1)

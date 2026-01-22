@@ -77,19 +77,22 @@ if __name__ == "__main__":
         
     if standard_clustering:
         start = time.time()
-        clusters,unclustered_points,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
+        data_dict,rho_history,B_history=iteration_over_rho(data,delta,epsilon,tau)
         end = time.time()
+
+        df=pd.DataFrame(data_dict.values())
+        clusters=df[df["cluster"]!=0].groupby("cluster")["idx"].apply(list).tolist()
 
         print("#"*30)
         print("Elapsed Time"+"\n"+f"{end-start:.3f}s")
         print("#"*30)
         print(f"Number of clusters found = {len(clusters)}")
         print("Cluster  || size")
-        ordered_clusters=sorted(clusters,key=lambda x:len(x),reverse=True)
-        for i,cluster in enumerate(ordered_clusters):
+        ordered_clusters_by_length=sorted(clusters,key=lambda x:len(x),reverse=True)
+        for i,cluster in enumerate(ordered_clusters_by_length):
             print(f"#{i} \t || {len(cluster)}")
-        save_clusters(data,clusters,unclustered_points,dimension,dataset_name)
+        save_clusters(df,dimension,dataset_name)
         save_log(rho_history,B_history,end-start,dataset_name)
         if dimension==2 or dimension==3:
-            plot_clusters(data,clusters,unclustered_points,dimension,dataset_name,kmeans_used=args.kmeans_clustering)
+            plot_clusters(df,dimension,dataset_name,kmeans_used=args.kmeans_clustering)
         
