@@ -44,7 +44,6 @@ def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
             
     return M,not_M
 
-
 def tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_centers):
     """
     M list of cube indices (as tuples)
@@ -154,8 +153,111 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
 
     return data_dict, rho_history, B_history
 
+############Backwards iteration logic####################
+
+def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
+    dimension=len(data[0])
+    cubes_dict,cubes_point_map,cubes_centers = get_cubes_dict(data, 2*delta, dimension)
+
+    #calulate h_values for all data points
+    n=len(data)
+    h_dict={}
+    data_dict={}
+    for i,data_point in enumerate(data):
+        data_dict[i]={"cluster":0,"idx":i,"coordinate":data_point}# 0 for unclustered
+    for x in data:
+        cube_idx_of_x = tuple([int(((x_d)+1)/(2*delta)) for x_d in x])
+        h_dict[cube_idx_of_x]=cubes_dict.get(cube_idx_of_x, 0)/(n*2**dimension*delta**dimension)
+    h_max = max(h_dict.values())
+    
+    epsilon=epsilon_factor*(h_max/(n*(2*delta)**dimension))**.5
+    tau=tau_factor*delta
+    rho_step=1/(n*(2*delta)**dimension)
+
+    cubes_by_h = sorted(h_dict.items(), key=lambda x:-x[1])
+    #sort cubes by rho:
+    cubes_by_rho=defaultdict(list)
+    for cube, rho in cubes_by_h:
+        cubes_by_rho[rho].append(cube)
+    cubes_by_rho=sorted(cubes_by_rho.items(),key=lambda x:-x[0])
+    
+    parent={}
+    clusters={}
+    active_cubes=set()
+    cluster_max_h = {} #caching max_h
+    cluster_length = {} #caching B1 and B2
+
+    def find(x): #get representative of cluster
+        while parent[x] != x:  
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb: #if representatives are different merge clusters
+            parent[rb] = ra
+            clusters[ra]|=clusters[rb]
+            cluster_max_h[ra]=max(cluster_max_h[ra],cluster_max_h[rb])
+            cluster_length[ra]+=cluster_length[rb]
+            del clusters[rb]
+            del cluster_max_h[rb]
+            del cluster_length[rb]
+    last_valid_clusters = None
+
+    rho_history=[]
+    B_history=[]
+    def cubes_connected(c1, c2):
+        return max(abs(c1[d] - c2[d]) for d in range(dimension)) < (tau / (2*delta) + 1)
+    
+    # Possibly we can do this recursively, by starting from rho_max/interation_depth and checking wheter we get len(remaining_clusters)!=1 and if not starting from rho_max(i+1)/iteration_depth etc...
+    for rho, cubes in cubes_by_rho:
+        for cube in cubes:
+            # Activate cubes
+            active_cubes.add(cube)
+            parent[cube] =cube
+            clusters[cube] ={cube}
+            cluster_max_h[cube] = h_dict[cube]
+            cluster_length[cube] = cubes_dict[cube]
+
+            # Union with neighbor cubes
+            for other in active_cubes:
+                if other != cube and cubes_connected(cube, other):
+                    union(cube, other)
+
+        # Current clusters
+        remaining_clusters = [
+            cl for cl in clusters.values()
+            if cluster_max_h[find(next(iter(cl)))] >= rho + epsilon
+        ]
+        rho_history.append(rho)
+        lengths=sorted((cluster_length[find(next(iter(cl)))] for cl in remaining_clusters),reverse=True)
+        B1 = lengths[0] if len(lengths) > 0 else 0
+        B2 = lengths[1] if len(lengths) > 1 else 0
+        B_history.append([B1,B2])
+        # Store last nontrivial clustering
+        if len(remaining_clusters) != 1:
+            last_valid_clusters = remaining_clusters
+            rho_history=[rho]
+            B_history=[[B1,B2]]
+
+    # Assign clusters
+    data_dict = {
+        i: {"cluster": 0, "idx": i, "coordinate": data[i]}
+        for i in range(len(data))
+    }
+
+    if last_valid_clusters is not None:
+        for cid, cube_cluster in enumerate(last_valid_clusters, start=1):
+            for cube in cube_cluster:
+                for point_idx in cubes_point_map[cube]:
+                    data_dict[point_idx]["cluster"] = cid
+
+    return data_dict, rho_history[::-1], B_history[::-1]
+
+    
+    
 #TODO: determine quality of clusters
-#TODO: clustering with scipy.cluster
 #TODO: determine optimal parameters delta, epsilon, tau
 
 def determine_optimal_delta(data,epsilon_factor,tau_factor):
@@ -164,7 +266,6 @@ def determine_optimal_delta(data,epsilon_factor,tau_factor):
     for delta in Delta:
         data_dict,rho_hist,_=iteration_over_rho(data,delta,epsilon_factor,tau_factor)
         clusters=pd.DataFrame(data_dict.values()).groupby("cluster")["idx"].apply(list).tolist()
-        #####################FIX THIS#############################
         if len(clusters)>1:
             rho_stars.append(rho_hist[-1])
         else: 
@@ -174,20 +275,9 @@ def determine_optimal_delta(data,epsilon_factor,tau_factor):
 
 
 def save_clusters(df,dimension,dataset_name):
-    output=[]
-    
-    # for cluster_id,cluster in enumerate(clusters):
-    #     for point in cluster:
-    #         output.append({"cluster":cluster_id+1,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
-    # for point in unclustered_points:
-    #     output.append({"cluster":0,"idx":point,"coordinate":[data[point][d] for d in range(dimension)]})
     dataresults_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cluster-results")
     
-    # print(df.groupby("idx").head())
-    # print(df[["cluster","coordinate"]].head())
     df[[f"coordinate_{i}" for i in range(dimension)]]=pd.DataFrame(df.coordinate.tolist(),index=df.index)
-    # df.assign(freq=df.groupby('cluster')['cluster'].transform('count'))\
-#   .sort_values(by=['freq','cluster'],ascending=[False,True])
     df[["cluster"]+[f"coordinate_{i}" for i in range(dimension)]].to_csv(os.path.join(dataresults_path,f"team-7-{dataset_name}.result.csv"),index=False,header=False)
         
 def save_log(rho_history,B_history,runtime,dataset_name):
