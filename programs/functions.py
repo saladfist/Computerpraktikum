@@ -327,7 +327,7 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
                 vals=[v for v, _ in coords]
                 i =insertion_index(vals,cube[d])
                 lo=max(0,i-threshold+1)
-                hi=max(len(coords),i+threshold+1)
+                hi=min(len(coords),i+threshold+1)
                 for _,other in coords[lo:hi]:
                     candidates.add(other)
             for c in candidates:
