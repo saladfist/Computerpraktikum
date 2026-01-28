@@ -146,7 +146,7 @@ def iteration_over_rho(data,delta,epsilon_factor,tau_factor):
     
     while True:
         M,not_M=get_M(rho,h_dict)
-        B_current,B1,B2=tau_connected_clusters(data,M,tau,delta,dimension,cubes_dict,cubes_centers)
+        B_current,B1,B2=tau_connected_clusters(M,tau,delta,dimension,cubes_dict)
         remaining_clusters=drop_clusters(B_current,h_dict,rho,epsilon)
         
         rho_history.append(rho)
@@ -196,6 +196,7 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
     
     parent={}
     clusters={}
+    ordered_cubes=defaultdict(list)
     active_cubes=set()
     cluster_max_h = {} #caching max_h
     cluster_length = {} #caching B1 and B2
@@ -220,7 +221,7 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
 
     rho_history=[]
     B_history=[]
-    threshold = (tau / (2*delta) + 1)
+    threshold = int((tau / (2*delta) + 1))
     def cubes_connected(c1, c2): 
         for d in range(dimension): 
             diff = abs(c1[d] - c2[d])
@@ -228,9 +229,85 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
                 return False  
         return True 
 
+    #first iteration to get M_rho_max
+    rho_max,cubes_max=cubes_by_rho[0]
+    for cube in cubes_max:
+        # Activate cubes
+        active_cubes.add(cube)
+        parent[cube] =cube
+        clusters[cube] ={cube}
+        cluster_max_h[cube] = h_dict[cube]
+        cluster_length[cube] = cubes_dict[cube]
 
-    # Possibly we can do this recursively, by starting from rho_max/iteration_depth and checking whether we get len(remaining_clusters)!=1 and if not starting from rho_max(i+1)/iteration_depth etc...
-    for rho, cubes in cubes_by_rho:
+        # Union with neighbor cubes
+        for other in active_cubes:
+            if other != cube and cubes_connected(cube, other):
+                union(cube, other)
+
+    # Current clusters
+    remaining_clusters = [
+        cl for cl in clusters.values()
+        if cluster_max_h[find(next(iter(cl)))] >= rho_max + epsilon
+    ]
+    rho_history.append(rho_max)
+    lengths=sorted((cluster_length[find(next(iter(cl)))] for cl in remaining_clusters),reverse=True)
+    B1 = lengths[0] if len(lengths) > 0 else 0
+    B2 = lengths[1] if len(lengths) > 1 else 0
+    B_history.append([B1,B2])
+    # Store last nontrivial clustering
+    if len(remaining_clusters) != 1:
+        last_valid_clusters = remaining_clusters
+        rho_history=[rho_max]
+        B_history=[[B1,B2]]
+    
+    def mergeSort(arr):
+        if len(arr) <= 1:
+            return arr
+
+        mid = len(arr) // 2
+        leftHalf = arr[:mid]
+        rightHalf = arr[mid:]
+
+        sortedLeft = mergeSort(leftHalf)
+        sortedRight = mergeSort(rightHalf)
+
+        return merge(sortedLeft, sortedRight)
+
+    def merge(left, right):
+        result = []
+        i = j = 0
+
+        while i < len(left) and j < len(right):
+            if left[i] < right[j]:
+                result.append(left[i])
+                i += 1
+            else:
+                result.append(right[j])
+                j += 1
+
+        result.extend(left[i:])
+        result.extend(right[j:])
+
+        return result
+    def insertion_index(ls, x):
+        lo, hi = 0, len(ls)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if ls[mid] < x:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo
+    #sort M_rho_max in each dimension using merge sort
+    #ordered_cubes should store cube index 
+    
+    for d in range(dimension):
+        ordered_cubes[d] = sorted(
+            [(cube[d], cube) for cube in cubes_max],
+            key=lambda x: x[0]
+        )
+    
+    for rho, cubes in cubes_by_rho[0:]:
         for cube in cubes:
             # Activate cubes
             active_cubes.add(cube)
@@ -239,10 +316,28 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
             cluster_max_h[cube] = h_dict[cube]
             cluster_length[cube] = cubes_dict[cube]
 
-            # Union with neighbor cubes
-            for other in active_cubes:
-                if other != cube and cubes_connected(cube, other):
-                    union(cube, other)
+            # # Union with neighbor cubes
+            # for other in active_cubes:
+            #     if other != cube and cubes_connected(cube, other):
+            #         union(cube, other)
+            # check using insertion sort whether cube is connected to another cube in M
+            candidates=set()
+            for d in range(dimension):
+                coords = ordered_cubes[d]
+                vals=[v for v, _ in coords]
+                i =insertion_index(vals,cube[d])
+                lo=max(0,i-threshold+1)
+                hi=max(len(coords),i+threshold+1)
+                for _,other in coords[lo:hi]:
+                    candidates.add(other)
+            for c in candidates:
+                if c != cube and cubes_connected(cube, c):
+                    union(cube, c)
+            for d in range(dimension):
+                coords = ordered_cubes[d]
+                values = [v for v, _ in coords]
+                i = insertion_index(values, cube[d])
+                coords.insert(i, (cube[d], cube))
 
         # Current clusters
         remaining_clusters = [
