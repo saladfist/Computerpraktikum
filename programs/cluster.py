@@ -32,9 +32,14 @@ if __name__ == "__main__":
     epsilon = args.epsilon
     tau = args.tau
     ndata =args.ndata
+
     dataset_name=args.dataset
-    if dataset_name.endswith(".csv"):
-        dataset_name=dataset_name[:-4]
+    dataset_basename = os.path.basename(dataset_name)   #remove path if cluster data is given with path
+
+    if dataset_basename.endswith(".csv"):
+        dataset_name = dataset_basename[:-4]  
+    else:
+        dataset_name = dataset_basename
         
     dataset_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), os.path.join("cluster-data", f"{dataset_name}.csv"))
     # for p
