@@ -1,0 +1,4 @@
+###TODO###
+-verbose output mode for debugging
+-rho iteration from the top and reusing clusters
+-timeit with more digits 
