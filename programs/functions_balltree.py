@@ -3,7 +3,7 @@ from matplotlib import cm
 import pandas as pd
 import os 
 from collections import deque, defaultdict
-from bisect import bisect_left, bisect_right, insort
+
 
 def get_cubes_dict(data,cube_length,dimension):
     '''
@@ -35,93 +35,13 @@ def get_cubes_dict(data,cube_length,dimension):
             cubes_dict[cube_idx] = 0 
         cubes_dict[cube_idx] += 1
         cubes_point_map[cube_idx].append(point)
-    
-    def cube_center(c_idx):
-        return tuple(-1 + (i + 0.5) * cube_length for i in c_idx)
-    
-    cubes_centers = {c: cube_center(c) for c in cubes_dict.keys()}
-    return cubes_dict,cubes_point_map, cubes_centers
-
-def get_M(rho,h_dict): #calculates sets Mρ := {x : hD,δ (x) ≥ ρ}
-    #M: list of cube indices (as tuples)
-    #not_M: list of cube indices (as tuples)
-    M=[]
-    not_M=[]
-    for i,h in h_dict.items():
-        # print("i,h",i,h)
-        if h>=rho:
-            M.append(i)
-        else:
-            not_M.append(i)
-            
-    return M,not_M
-
-def tau_connected_clusters(M,tau,delta,dimension,cubes_dict): #-data - cube_centers
-    """
-    M list of cube indices (as tuples)
-    tau float
-    delta float
-    dimension int
-    Returns: list of clusters, where each cluster is a set of cube indices
-    """
-
-    # cluster cubes by connectivity of their centers: 
-    # center-distance <= tau -> connected 
-    # center-distance <= tau+2delta -> check whether these cubes contain points close enough to be connected 
-    threshold = (tau)/(2*delta)+1  
-    def cubes_connected(c1,c2):
-        dist=[c1[d]-c2[d] for d in range(dimension)]
-        dist_abs=max(abs(_) for _ in dist)
-        if dist_abs<threshold:
-            return True
-        return False
-    
-    visited = set()
-    clusters = []
-    M_set = set(M)
-    for start_cube in M_set:
-        if start_cube in visited:
-            continue
-        stack = [start_cube]
-        cluster = set()
         
-        while stack:
-            c = stack.pop()
-            if c in visited:
-                continue
-            visited.add(c)
-            cluster.add(c)
-            
-            for other in M_set:
-                if other not in visited and cubes_connected(c,other):
-                    stack.append(other)
+    return cubes_dict,cubes_point_map
 
-        clusters.append(cluster)
-
-    # order clusters by size (largest first).
-    clusters.sort(key=len, reverse=True)
-    #get the number of datapoints in the largest and second largest cluster
-    #cubes_dict contains counts of datapoints per cube
-    B1 = sum(cubes_dict[c] for c in clusters[0]) if len(clusters) > 0 else 0
-    B2 = sum(cubes_dict[c] for c in clusters[1]) if len(clusters) > 1 else 0
-    return clusters, B1, B2
-
-
-def drop_clusters(B,h_dict,rho,epsilon): #drop B if it contains no h with h geq ρ + 2ε; B contains cube indices
-    remaining_clusters=[]
-    for cluster in B:
-        # For each cube in cluster, find max h-value among points in that cube
-        max_h = 0
-        for point_idx, h in h_dict.items():
-            if point_idx in cluster:
-                max_h = max(max_h, h)
-        if max_h >= rho + epsilon:
-            remaining_clusters.append(cluster)
-    return remaining_clusters
 
 def backwards_rho_iteration(data, delta, epsilon_factor, tau_factor):
     dimension = len(data[0])
-    cubes_dict, cubes_point_map, cubes_centers = get_cubes_dict(data, 2*delta, dimension)
+    cubes_dict, cubes_point_map = get_cubes_dict(data, 2*delta, dimension)
     
     # Calculate h_values for all data points
     n = len(data)
@@ -136,7 +56,6 @@ def backwards_rho_iteration(data, delta, epsilon_factor, tau_factor):
     
     epsilon = epsilon_factor * (h_max / (n * (2*delta)**dimension))**0.5
     tau = tau_factor * delta
-    rho_step = 1 / (n * (2*delta)**dimension)
     
     cubes_by_h = sorted(h_dict.items(), key=lambda x: -x[1])
     cubes_by_rho = defaultdict(list)
