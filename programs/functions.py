@@ -231,7 +231,6 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
         return True 
 
 
-
     def find_possible_neighbors(cube, sorted_lists, max_diff=threshold):
         if not sorted_lists:
             return []
