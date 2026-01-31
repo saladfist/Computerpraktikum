@@ -186,7 +186,6 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
     
     epsilon=epsilon_factor*(h_max/(n*(2*delta)**dimension))**.5
     tau=tau_factor*delta
-    rho_step=1/(n*(2*delta)**dimension)
 
     cubes_by_h = sorted(h_dict.items(), key=lambda x:-x[1])
     #sort cubes by rho:
@@ -283,7 +282,7 @@ def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
 
             # union with neighbors 
             for other in find_possible_neighbors(cube, sorted_active_cubes):
-                if other != cube and cubes_connected(cube, other):
+                if other != cube:
                     union(cube, other)
 
         # Current clusters

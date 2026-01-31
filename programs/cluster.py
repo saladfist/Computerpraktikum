@@ -3,8 +3,7 @@ import argparse
 import pandas as pd
 import time
 import os
-import glob
-from functions_balltree import *
+from functions import *
 from scipy_clustering import *
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

@@ -3,6 +3,7 @@ from matplotlib import cm
 import pandas as pd
 import os 
 from collections import deque, defaultdict
+from bisect import bisect_left, bisect_right, insort
 
 
 def get_cubes_dict(data,cube_length,dimension):
@@ -37,192 +38,142 @@ def get_cubes_dict(data,cube_length,dimension):
         cubes_point_map[cube_idx].append(point)
         
     return cubes_dict,cubes_point_map
+def backwards_rho_iteration(data,delta,epsilon_factor,tau_factor):
+    dimension=len(data[0])
+    cubes_dict,cubes_point_map = get_cubes_dict(data, 2*delta, dimension)
 
-
-def backwards_rho_iteration(data, delta, epsilon_factor, tau_factor):
-    dimension = len(data[0])
-    cubes_dict, cubes_point_map = get_cubes_dict(data, 2*delta, dimension)
-    
-    # Calculate h_values for all data points
-    n = len(data)
-    data_dict = {}
+    #calulate h_values for all data points
+    n=len(data)
+    data_dict={}
     h_dict = {}
     total_volume = n * (2*delta)**dimension
-    for i, data_point in enumerate(data):
-        data_dict[i] = {"cluster": 0, "idx": i, "coordinate": data_point}
-    for cube_idx, count in cubes_dict.items():
-        h_dict[cube_idx] = count / total_volume
+    h_dict = {cube: count / total_volume for cube, count in cubes_dict.items()}
     h_max = max(h_dict.values())
-    
-    epsilon = epsilon_factor * (h_max / (n * (2*delta)**dimension))**0.5
-    tau = tau_factor * delta
-    
-    cubes_by_h = sorted(h_dict.items(), key=lambda x: -x[1])
+    epsilon=epsilon_factor*(h_max/(n*(2*delta)**dimension))**.5
+    tau=tau_factor*delta
+
     cubes_by_rho = defaultdict(list)
-    for cube, rho in cubes_by_h:
+    for cube, rho in h_dict.items():
         cubes_by_rho[rho].append(cube)
     cubes_by_rho = sorted(cubes_by_rho.items(), key=lambda x: -x[0])
-    
-    parent = {}
-    clusters = {}
-    active_cubes = set()
-    cluster_max_h = {}
-    cluster_length = {}
-    last_valid_clusters = None
-    
-    def find(x):
+
+    parent={}
+    clusters={}
+    active_cubes=set()
+    cluster_max_h = {} #caching max_h
+    cluster_length = {} #caching B1 and B2
+
+    def find(x): #get representative of cluster
         while parent[x] != x:
             parent[x] = parent[parent[x]]
             x = parent[x]
         return x
-    
+
     def union(a, b):
         ra, rb = find(a), find(b)
         if ra != rb:
             parent[rb] = ra
+            # Merge cluster sets
             clusters[ra] |= clusters[rb]
             cluster_max_h[ra] = max(cluster_max_h[ra], cluster_max_h[rb])
             cluster_length[ra] += cluster_length[rb]
+            # Clean up merged cluster
             del clusters[rb]
             del cluster_max_h[rb]
             del cluster_length[rb]
-    
-    rho_history = []
-    B_history = []
-    threshold = (tau / (2*delta)) + 1
-    
+
     def cubes_connected(c1, c2):
         for d in range(dimension):
             diff = abs(c1[d] - c2[d])
             if diff >= threshold:
                 return False
         return True
-    
-    # True KD-Tree implementation
-    class ChebyshevKDTree:
-        def __init__(self, dimension):
-            self.dim = dimension
-            self.root = None
-            self.cube_to_node = {}  # Map cube to its node for quick access
-        
-        class Node:
-            def __init__(self, cube, depth):
-                self.cube = cube
-                self.left = None
-                self.right = None
-                self.depth = depth
-                self.axis = depth % dimension
-        
-        def insert(self, cube):
-            self.root = self._insert(self.root, cube, 0)
-            self.cube_to_node[cube] = self.root
-        
-        def _insert(self, node, cube, depth):
-            if node is None:
-                return self.Node(cube, depth)
-            
-            axis = depth % self.dim
-            if cube[axis] < node.cube[axis]:
-                node.left = self._insert(node.left, cube, depth + 1)
-            else:
-                node.right = self._insert(node.right, cube, depth + 1)
-            
-            return node
-        
-        def find_candidates(self, query_cube, max_diff):
-            """Find candidate cubes that could be within Chebyshev distance."""
-            candidates = []
-            if self.root:
-                self._find_candidates_recursive(self.root, query_cube, max_diff, candidates, 0)
-            # Remove query cube if present and remove duplicates
-            return list(set(c for c in candidates if c != query_cube))
-        
-        def _find_candidates_recursive(self, node, query_cube, max_diff, candidates, best_dim):
-            """Recursively find candidate cubes using KD-tree pruning."""
-            if node is None:
-                return
-            
-            # Check if this node could be a candidate based on best dimension heuristic
-            # Similar to original algorithm: use dimension with smallest range first
-            if best_dim >= self.dim:
-                best_dim = 0
-            
-            axis_diff = abs(query_cube[best_dim] - node.cube[best_dim])
-            
-            # If difference in best dimension is within range, add as candidate
-            if axis_diff < max_diff:
-                candidates.append(node.cube)
-            
-            # Decide which branches to search based on splitting plane
-            axis = node.axis
-            diff = query_cube[axis] - node.cube[axis]
-            
-            # Search the side that contains the query point first
-            if diff <= 0:
-                self._find_candidates_recursive(node.left, query_cube, max_diff, candidates, best_dim + 1)
-                # If query point is close to splitting plane, search other side too
-                if abs(diff) < max_diff:
-                    self._find_candidates_recursive(node.right, query_cube, max_diff, candidates, best_dim + 1)
-            else:
-                self._find_candidates_recursive(node.right, query_cube, max_diff, candidates, best_dim + 1)
-                if abs(diff) < max_diff:
-                    self._find_candidates_recursive(node.left, query_cube, max_diff, candidates, best_dim + 1)
-    
-    # Initialize KD-Tree
-    kd_tree = ChebyshevKDTree(dimension)
-    
-    # Process cubes in decreasing density order
+
+    def find_possible_neighbors(cube, sorted_lists):
+        if not sorted_lists:
+            return []
+        best_candidates = []
+        min_count = float('inf')
+        min_idx=0
+        max_idx=len(sorted_lists[0])
+        #find best dimension
+        for d in range(dimension):
+            lst = sorted_lists[d]
+            low = max(cube[d] - threshold,min_idx)
+            high = min(cube[d] + threshold,max_idx)
+            start = bisect_left(lst, low, key=lambda tup: tup[d])
+            end = bisect_right(lst, high, key=lambda tup: tup[d])
+            count = end - start
+            if count < min_count:
+                min_count = count
+                best_candidates = lst[start:end]
+
+        if not best_candidates:
+            return []
+        neighbors = []
+        for other in best_candidates:
+            if cubes_connected(cube,other):
+                neighbors.append(other)
+        return neighbors
+
+    # Possibly we can do this recursively, by starting from rho_max/iteration_depth and checking whether we get len(remaining_clusters)!=1 and if not starting from rho_max(i+1)/iteration_depth etc...
+    sorted_active_cubes = [[] for _ in range(dimension)]
+    last_valid_clusters = None
+    rho_history=[]
+    B_history=[]
+    threshold = (tau / (2*delta) + 1)
+
     for rho, cubes in cubes_by_rho:
         for cube in cubes:
-            # Activate cube
+            # activate cubes
             active_cubes.add(cube)
-            parent[cube] = cube
+            parent[cube] = cube#
             clusters[cube] = {cube}
             cluster_max_h[cube] = h_dict[cube]
             cluster_length[cube] = cubes_dict[cube]
-            
-            # Insert cube into KD-Tree
-            kd_tree.insert(cube)
-            
-            # Find candidate neighbors using KD-Tree
-            candidates = kd_tree.find_candidates(cube, threshold)
-            
-            # Check connection and union
-            for other in candidates:
-                if other in active_cubes and cubes_connected(cube, other):
-                    union(cube, other)
-        
+
+            # insert cube into sorted lists
+            for d in range(dimension):
+                insort(sorted_active_cubes[d], cube, key=lambda tup: tup[d])
+
+            # union with neighbors
+            for other in find_possible_neighbors(cube, sorted_active_cubes):
+                union(cube, other)
+
         # Current clusters
         remaining_clusters = [
-            cl for cl in clusters.values()
-            if cluster_max_h[find(next(iter(cl)))] >= rho + epsilon
+            cluster_set for cluster_set in clusters.values()
+            if cluster_max_h[find(next(iter(cluster_set)))] >= rho + epsilon
         ]
-        
+
         rho_history.append(rho)
-        lengths = sorted((cluster_length[find(next(iter(cl)))] for cl in remaining_clusters), reverse=True)
+        lengths = sorted(
+            (cluster_length[find(next(iter(cl)))] for cl in remaining_clusters),
+            reverse=True
+        )
         B1 = lengths[0] if len(lengths) > 0 else 0
         B2 = lengths[1] if len(lengths) > 1 else 0
-        B_history.append([B1, B2])
-        
+        B_history.append([B1,B2])
+
+        # Store last nontrivial clustering
         if len(remaining_clusters) != 1:
             last_valid_clusters = remaining_clusters
             rho_history = [rho]
             B_history = [[B1, B2]]
-    
+
     # Assign clusters
     data_dict = {
         i: {"cluster": 0, "idx": i, "coordinate": data[i]}
         for i in range(len(data))
     }
-    
+
     if last_valid_clusters is not None:
         for cid, cube_cluster in enumerate(last_valid_clusters, start=1):
             for cube in cube_cluster:
-                for point_idx in cubes_point_map.get(cube, []):
-                    data_dict[point_idx]["cluster"] = cid
-    
+                for idx in cubes_point_map[cube]:
+                    data_dict[idx]["cluster"] = cid
+
     return data_dict, rho_history[::-1], B_history[::-1]
-    
 #TODO: determine quality of clusters
 #TODO: determine optimal parameters delta, epsilon, tau
 
